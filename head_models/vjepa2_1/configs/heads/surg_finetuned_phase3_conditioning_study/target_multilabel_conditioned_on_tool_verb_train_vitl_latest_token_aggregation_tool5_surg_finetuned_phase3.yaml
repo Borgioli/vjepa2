@@ -1,0 +1,116 @@
+# Target-only multi-label detection conditioned on tool and verb/action for the Tool5 study.
+# One clip plus all active conditioning pairs in, one multi-label target output
+# per pair.
+#
+# The tool/action labels are NOT trained by this config. They are conditioning inputs.
+# The head predicts ONLY target labels. A clip can contain multiple condition
+# pairs, and each pair can activate multiple targets.
+
+app: train
+eval_name: 'triplet_recog_frozen'
+
+folder: '/path/to/data_root/vjepa2_1/trained_heads/conditioning_study/target_multilabel_conditioned_on_tool_verb_tool5_native_surg_finetuned_phase3'
+tag: 'target_multilabel_conditioned_on_tool_verb_head_training_vitl_latest_token_aggregation_tool5_native_surg_finetuned_phase3_conditioning_study'
+
+resume_checkpoint: false
+
+pretrain:
+  folder: '/path/to/data_root/vjepa2_1'
+  checkpoint: '/path/to/data_root/vjepa2_1/chekpoints_vjepar_surg_finetuned/single4_all_datasets_phase3_higher_res_g8_latest.pth.tar'
+
+model_kwargs:
+  checkpoint: '/path/to/data_root/vjepa2_1/chekpoints_vjepar_surg_finetuned/single4_all_datasets_phase3_higher_res_g8_latest.pth.tar'
+  module_name: 'evals.triplet_recog_frozen.modelcustom.vit_encoder_multiclip'
+  pretrain_kwargs:
+    encoder:
+      model_name: 'vit_large'
+      patch_size: 16
+      tubelet_size: 2
+      checkpoint_key: 'target_encoder'
+      use_sdpa: True
+      use_rope: True
+  wrapper_kwargs:
+    max_frames: 128
+    use_pos_embed: False
+
+experiment:
+  classifier:
+    num_probe_blocks: 0
+    num_heads: 16
+    use_single_head: true
+    head_type: 'conditioned_token_aggregation'
+    token_pool: 'mean'
+    token_use_layer_norm: true
+    condition_num_classes: [5, 6]
+
+  data:
+    dataset_type: 'VideoDataset'
+    label_mode: 'multilabel'
+    conditioning_mode: 'multilabel_multi_condition_task'
+
+    dataset_train: '/path/to/data_root/vjepa2_1/app/csv_head_models/conditioning_study_target_multilabel_conditioned_on_tool_verb_train_native_tool5_runtime.csv'
+    dataset_val: '/path/to/data_root/vjepa2_1/app/csv_head_models/conditioning_study_target_multilabel_conditioned_on_tool_verb_val_native_tool5_runtime.csv'
+
+    multilabel_lookup_train: '/path/to/data_root/vjepa2_1/app/csv_head_models/conditioning_study_target_multilabel_conditioned_on_tool_verb_train_native_tool5.csv'
+    multilabel_lookup_val: '/path/to/data_root/vjepa2_1/app/csv_head_models/conditioning_study_target_multilabel_conditioned_on_tool_verb_val_native_tool5.csv'
+    multilabel_label_fields: ['target_multihots']
+    multilabel_condition_fields: ['conditioning_tool_ids', 'conditioning_verb_ids']
+    task_names: ['target']
+    task_modes: ['multilabel']
+    multilabel_threshold: 0.5
+    # Class order:
+    # connective tissue, cystic duct, adhesion, cystic pedicle, gallbladder,
+    # liver, null, peritoneum, cystic artery, fallciform ligament,
+    # omentum, fluid
+    multilabel_thresholds: [0.73, 0.63, 0.35, 0.62, 0.37, 0.34, 0.35, 0.65, 0.47, 0.50, 0.25, 0.50]
+
+    num_classes_per_task: [12]
+    class_names_per_task:
+      - [
+          'connective tissue',
+          'cystic duct',
+          'adhesion',
+          'cystic pedicle',
+          'gallbladder',
+          'liver',
+          'null',
+          'peritoneum',
+          'cystic artery',
+          'fallciform ligament',
+          'omentum',
+          'fluid',
+        ]
+
+    frames_per_clip: 16
+    frame_step: 1
+    resolution: 512
+    num_segments: 1
+    num_views_per_segment: 1
+    num_workers: 8
+    pin_memory: True
+    persistent_workers: False
+    dataloader_timeout: 120
+    normalization: null
+
+  optimization:
+    batch_size: 4
+    num_epochs: 3
+    use_bfloat16: True
+    loss_name: 'weighted_bce'
+    task_loss_names: ['weighted_bce']
+    pos_weight_power: 0.5
+    max_pos_weight: 10.0
+    save_confusion_matrices: True
+
+    multihead_kwargs:
+      - warmup: 0.05
+        start_lr: 0.0001
+        lr: 0.001
+        final_lr: 0.00001
+        weight_decay: 0.05
+        final_weight_decay: 0.4
+
+nodes: 1
+tasks_per_node: 1
+mem_per_gpu: '40G'
+cpus_per_task: 16

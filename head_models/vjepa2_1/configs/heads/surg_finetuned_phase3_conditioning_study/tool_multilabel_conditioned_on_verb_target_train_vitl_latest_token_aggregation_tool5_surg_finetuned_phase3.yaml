@@ -1,0 +1,92 @@
+# Tool-only multi-label detection conditioned on verb/action and target for the Tool5 study.
+
+app: train
+eval_name: 'triplet_recog_frozen'
+
+folder: '/path/to/data_root/vjepa2_1/trained_heads/conditioning_study/tool_multilabel_conditioned_on_verb_target_tool5_native_surg_finetuned_phase3'
+tag: 'tool_multilabel_conditioned_on_verb_target_head_training_vitl_latest_token_aggregation_tool5_native_surg_finetuned_phase3_conditioning_study'
+
+resume_checkpoint: false
+
+pretrain:
+  folder: '/path/to/data_root/vjepa2_1'
+  checkpoint: '/path/to/data_root/vjepa2_1/chekpoints_vjepar_surg_finetuned/single4_all_datasets_phase3_higher_res_g8_latest.pth.tar'
+
+model_kwargs:
+  checkpoint: '/path/to/data_root/vjepa2_1/chekpoints_vjepar_surg_finetuned/single4_all_datasets_phase3_higher_res_g8_latest.pth.tar'
+  module_name: 'evals.triplet_recog_frozen.modelcustom.vit_encoder_multiclip'
+  pretrain_kwargs:
+    encoder:
+      model_name: 'vit_large'
+      patch_size: 16
+      tubelet_size: 2
+      checkpoint_key: 'target_encoder'
+      use_sdpa: True
+      use_rope: True
+  wrapper_kwargs:
+    max_frames: 128
+    use_pos_embed: False
+
+experiment:
+  classifier:
+    num_probe_blocks: 0
+    num_heads: 16
+    use_single_head: true
+    head_type: 'conditioned_token_aggregation'
+    token_pool: 'mean'
+    token_use_layer_norm: true
+    condition_num_classes: [6, 12]
+
+  data:
+    dataset_type: 'VideoDataset'
+    label_mode: 'multilabel'
+    conditioning_mode: 'multilabel_multi_condition_task'
+
+    dataset_train: '/path/to/data_root/vjepa2_1/app/csv_head_models/conditioning_study_tool_multilabel_conditioned_on_verb_target_train_native_tool5_runtime.csv'
+    dataset_val: '/path/to/data_root/vjepa2_1/app/csv_head_models/conditioning_study_tool_multilabel_conditioned_on_verb_target_val_native_tool5_runtime.csv'
+
+    multilabel_lookup_train: '/path/to/data_root/vjepa2_1/app/csv_head_models/conditioning_study_tool_multilabel_conditioned_on_verb_target_train_native_tool5.csv'
+    multilabel_lookup_val: '/path/to/data_root/vjepa2_1/app/csv_head_models/conditioning_study_tool_multilabel_conditioned_on_verb_target_val_native_tool5.csv'
+    multilabel_label_fields: ['tool_multihots']
+    multilabel_condition_fields: ['conditioning_verb_ids', 'conditioning_target_ids']
+    task_names: ['tool']
+    task_modes: ['multilabel']
+    multilabel_thresholds: [0.68, 0.34, 0.46, 0.76, 0.57]
+
+    num_classes_per_task: [5]
+    class_names_per_task:
+      - ['clipper', 'grasper', 'hook', 'irrigator', 'scissors']
+
+    frames_per_clip: 16
+    frame_step: 1
+    resolution: 512
+    num_segments: 1
+    num_views_per_segment: 1
+    num_workers: 8
+    pin_memory: True
+    persistent_workers: False
+    dataloader_timeout: 120
+    normalization: null
+
+  optimization:
+    batch_size: 4
+    num_epochs: 3
+    use_bfloat16: True
+    loss_name: 'weighted_bce'
+    task_loss_names: ['weighted_bce']
+    pos_weight_power: 1.0
+    max_pos_weight: 20.0
+    save_confusion_matrices: True
+
+    multihead_kwargs:
+      - warmup: 0.05
+        start_lr: 0.001
+        lr: 0.01
+        final_lr: 0.0001
+        weight_decay: 0.01
+        final_weight_decay: 0.2
+
+nodes: 1
+tasks_per_node: 1
+mem_per_gpu: '40G'
+cpus_per_task: 16
