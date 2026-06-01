@@ -190,8 +190,10 @@
   .help { font-size: 11px; color: var(--muted); margin: 6px 0 0 0; line-height: 1.4; }
   .row-actions { display: flex; gap: 6px; margin-top: 10px; }
   .preview-error { color: var(--warn); padding: 10px 14px; font-size: 12px; white-space: pre-wrap; }
-  .exp-actions { display: flex; gap: 6px; }
+  .exp-actions { display: flex; gap: 6px; align-items: center; }
   .exp-actions button { font-size: 12px; padding: 4px 10px; }
+  .exp-actions button[disabled] { opacity: 0.4; cursor: not-allowed; }
+  .exp-actions .phase-count { font-size: 11px; color: var(--muted); padding: 2px 6px; background: var(--panel2); border: 1px solid var(--border); border-radius: 4px; font-family: ui-monospace, "SF Mono", monospace; }
   .toolbar { display: flex; gap: 10px; margin-bottom: 16px; align-items: flex-end; flex-wrap: wrap; background: var(--panel); padding: 12px 14px; border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow-sm); }
   .toolbar .meta-input { display: flex; flex-direction: column; gap: 4px; }
   .toolbar .meta-input label { font-size: 11px; color: var(--muted); font-weight: 500; }
@@ -923,16 +925,31 @@ const PHASE_DEFS = [
   },
 ];
 
-function makeExperiment(name) {
+function makeExperiment(name, numPhases) {
+  // Experiments can have 1, 2, or 3 phases. Phases always start at phase 1
+  // (pretrain) and run consecutively, so the phase[N] chains off phase[N-1]
+  // checkpoint logic in buildPhaseYaml stays valid.
+  const n = Math.max(1, Math.min(PHASE_DEFS.length, numPhases || PHASE_DEFS.length));
   return {
     name: name || "experiment_1",
-    phases: PHASE_DEFS.map((def, i) => {
+    phases: PHASE_DEFS.slice(0, n).map((def) => {
       const p = clonePhaseBase();
       def.overrides(p);
       p._open = false;  // all phases start collapsed; user clicks to expand
       return p;
     }),
   };
+}
+
+// Build a single phase by index using PHASE_DEFS as the template. Used when
+// the user clicks "+ Phase" to extend an experiment.
+function makePhase(phaseIdx) {
+  const def = PHASE_DEFS[phaseIdx];
+  if (!def) return null;
+  const p = clonePhaseBase();
+  def.overrides(p);
+  p._open = false;
+  return p;
 }
 
 // =====================================================================
@@ -1245,7 +1262,8 @@ function buildLauncherSh(opts) {
   state.experiments.forEach((exp, ei) => {
     lines.push(`# ---- ${exp.name} ----`);
     lines.push(`printf '\\n== Running experiment %s ==\\n' "${exp.name}"`);
-    PHASE_DEFS.forEach((def, pi) => {
+    exp.phases.forEach((_, pi) => {
+      const def = PHASE_DEFS[pi];
       const entry = canonMap[ei][pi];
       const canonicalExp = state.experiments[entry.canonicalExpIdx];
       const yamlPath = `$ROOT/${configsSubdir}/${canonicalExp.name}/${def.filename}`;
@@ -1675,6 +1693,35 @@ function renderExperiment(exp, expIdx) {
         "data-fkey": `e${expIdx}.name`,
       }),
       el("div", { class: "exp-actions" }, [
+        el("span", { class: "phase-count", title: `This experiment has ${exp.phases.length} of ${PHASE_DEFS.length} phases` }, `${exp.phases.length}p`),
+        (() => {
+          const attrs = {
+            title: `Remove the last phase (currently ${exp.phases.length})`,
+            onclick: () => {
+              if (exp.phases.length <= 1) return;
+              exp.phases.pop();
+              if (state.preview.expIdx === expIdx && state.preview.phaseIdx >= exp.phases.length) {
+                state.preview.phaseIdx = exp.phases.length - 1;
+              }
+              renderAll();
+            },
+          };
+          if (exp.phases.length <= 1) attrs.disabled = "disabled";
+          return el("button", attrs, "– Phase");
+        })(),
+        (() => {
+          const attrs = {
+            title: `Add the next phase (max ${PHASE_DEFS.length})`,
+            onclick: () => {
+              if (exp.phases.length >= PHASE_DEFS.length) return;
+              const nextPhase = makePhase(exp.phases.length);
+              if (nextPhase) exp.phases.push(nextPhase);
+              renderAll();
+            },
+          };
+          if (exp.phases.length >= PHASE_DEFS.length) attrs.disabled = "disabled";
+          return el("button", attrs, "+ Phase");
+        })(),
         el(
           "button",
           {
@@ -1807,7 +1854,8 @@ function renderPreviewTabs() {
     previewTabs.appendChild(
       el("span", { style: "color: var(--muted); font-size: 11px; align-self: center; margin-right: 4px;" }, `${exp.name}:`),
     );
-    PHASE_DEFS.forEach((def, pi) => {
+    // Only emit a tab per phase that this experiment actually has.
+    exp.phases.forEach((_, pi) => {
       previewTabs.appendChild(tab(`p${pi + 1}`, "yaml", ei, pi));
     });
     previewTabs.appendChild(el("span", { style: "color: var(--border); align-self: center; margin: 0 4px;" }, "|"));
@@ -1972,6 +2020,10 @@ function renderPreview() {
         previewBody.textContent = "(no experiment)";
         return;
       }
+      // Clamp phaseIdx in case the user just removed a phase from this exp.
+      if (state.preview.phaseIdx >= exp.phases.length) {
+        state.preview.phaseIdx = exp.phases.length - 1;
+      }
       const obj = buildPhaseYaml(exp, state.preview.phaseIdx, getOpts());
       previewBody.innerHTML = highlightYaml(renderYaml(obj));
     } else {
@@ -2123,13 +2175,17 @@ function applyPropagate() {
   for (const ti of targetIdxs) {
     const dst = state.experiments[ti];
     if (fromPhaseRaw === "all") {
-      for (let pi = 0; pi < PHASE_DEFS.length; pi++) {
+      // Per-phase copy: only touch phases that exist on BOTH src and dst.
+      const limit = Math.min(src.phases.length, dst.phases.length);
+      for (let pi = 0; pi < limit; pi++) {
         dst.phases[pi].datasets = JSON.parse(JSON.stringify(src.phases[pi].datasets));
       }
     } else {
       const pi = parseInt(fromPhaseRaw, 10) || 0;
+      if (pi >= src.phases.length) continue;  // source phase doesn't exist
       const copy = JSON.parse(JSON.stringify(src.phases[pi].datasets));
-      for (let p = 0; p < PHASE_DEFS.length; p++) {
+      // Apply to every phase the destination actually has.
+      for (let p = 0; p < dst.phases.length; p++) {
         dst.phases[p].datasets = JSON.parse(JSON.stringify(copy));
       }
     }
@@ -2162,6 +2218,7 @@ function applySweep() {
     const raw = start + sweepIdx * step;
     for (const pi of phaseIdxs) {
       const phase = exp.phases[pi];
+      if (!phase) continue;  // this experiment doesn't have that phase
       for (const csv of csvs) {
         const row = ensureCsvInPhase(phase, csv);
         if (fieldName === "weight") {
@@ -2439,7 +2496,8 @@ document.getElementById("downloadZip").addEventListener("click", async () => {
   const canonMap = computePhaseCanonicalMap();
   const writtenYamlPaths = new Set();
   state.experiments.forEach((exp, ei) => {
-    PHASE_DEFS.forEach((def, pi) => {
+    exp.phases.forEach((_, pi) => {
+      const def = PHASE_DEFS[pi];
       const entry = canonMap[ei][pi];
       if (entry.canonicalExpIdx !== ei) return; // a sibling already wrote it
       const path = `${configsSubdir}/${exp.name}/${def.filename}`;
@@ -2750,7 +2808,10 @@ async function loadShAndYamls(files) {
   const missing = [];
   for (const expSpec of parsed) {
     const phases = [];
-    for (let pi = 0; pi < PHASE_DEFS.length; pi++) {
+    // Only build as many phases as the launcher actually references for this
+    // experiment, capped at PHASE_DEFS.length. Experiments may have 1, 2, or 3.
+    const phaseCount = Math.max(1, Math.min(PHASE_DEFS.length, expSpec.yamls.length));
+    for (let pi = 0; pi < phaseCount; pi++) {
       const rel = expSpec.yamls[pi];
       if (!rel) {
         const fallback = clonePhaseBase();
@@ -2879,7 +2940,7 @@ const TOUR_STEPS = [
   {
     selector: ".experiment",
     title: "One card per experiment",
-    body: "Each card is one experiment with its own 3-phase chain (pretrain, main, cooldown). The coloured left rail on each phase matches the flow-view legend: <b style='color:#34c759'>green</b> / <b style='color:#ff9500'>orange</b> / <b style='color:#af52de'>purple</b>.",
+    body: "Each card is one experiment with up to a 3-phase chain (pretrain, main, cooldown). Use <b>+ Phase</b> / <b>– Phase</b> in the header to shorten it to 1 or 2 phases when you don't need the full chain. The coloured left rail on each phase matches the flow-view legend: <b style='color:#34c759'>green</b> / <b style='color:#ff9500'>orange</b> / <b style='color:#af52de'>purple</b>.",
     placement: "right",
     beforeShow: () => {
       // Make sure phase 1 is open so the rails inside are visible.
