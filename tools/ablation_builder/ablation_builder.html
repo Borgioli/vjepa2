@@ -208,6 +208,9 @@
   .csv-picker-controls button { font-size: 11px; padding: 3px 9px; }
   .csv-picker-controls input { flex: 1; background: #ffffff; color: var(--text); border: 1px solid var(--border); padding: 5px 8px; border-radius: 6px; font-size: 12px; font-family: ui-monospace, "SF Mono", monospace; }
   .csv-count { color: var(--muted); font-weight: 400; font-size: 11px; }
+  .csv-root-row { display: flex; gap: 6px; align-items: center; }
+  .csv-root-row input[type=text] { flex: 1; }
+  .csv-root-row button { font-size: 11px; padding: 5px 10px; white-space: nowrap; }
   @media (max-width: 1100px) { .batch-ops .ops-body { grid-template-columns: 1fr; } }
   ::-webkit-scrollbar { width: 10px; height: 10px; }
   ::-webkit-scrollbar-track { background: transparent; }
@@ -575,8 +578,12 @@
         <input id="polarisPythonBin" type="text" value="/path/to/venvs/vjepa_polaris/bin/python" />
       </div>
       <div class="meta-input">
-        <label>CSV root folder</label>
-        <input id="csvRoot" type="text" value="/path/to/app/csv_data" />
+        <label>CSV root folder <span id="csvRootStatus" class="csv-count"></span></label>
+        <div class="csv-root-row">
+          <input id="csvRoot" type="text" value="/path/to/app/csv_data" />
+          <button type="button" id="csvRootBrowse" title="Pick a local folder to scan for .csv filenames (used by the Sweep picker). The text path is what gets written into the generated YAMLs.">Browse…</button>
+          <input id="csvRootPicker" type="file" webkitdirectory directory multiple style="display:none" />
+        </div>
       </div>
     </div>
 
@@ -693,19 +700,10 @@ function getCsvRoot() {
   const v = inp ? inp.value.trim().replace(/\/+$/, "") : "";
   return v || DEFAULT_CSV_ROOT;
 }
-const KNOWN_CSVS = [
-  "path_CRCD.csv",
-  "path_EndoVis15.csv",
-  "path_JIGSAW.csv",
-  "path_SITL.csv",
-  "path_SITL_highres.csv",
-  "path_surgenet_robotic.csv",
-  "path_surgtoolloc2022.csv",
-  "path_SurgVisDom.csv",
-  "path_surgvu24.csv",
-  "path_miccai-2017.csv",
-  "path_miccai-endoseg.csv",
-];
+// CSVs discovered by the folder picker (Browse… button next to "CSV root folder").
+// Empty by default — the Sweep picker only lists names that have been loaded from
+// the user-chosen folder or that already appear in some experiment.
+let KNOWN_CSVS = [];
 
 // =====================================================================
 // Baseline YAMLs (from configs/train_2_1/vitl_Neil/vitl16_ablation_all-datasets_single4/)
@@ -2092,6 +2090,39 @@ document.getElementById("csvRoot").addEventListener("input", () => {
   // CSV root is also displayed inside dataset rows (tooltip + help text), so a
   // full re-render is needed — not just the preview.
   renderAll();
+});
+
+// Folder picker: read the .csv filenames from whatever local folder the user
+// chooses, and use those as the Sweep picker's list. Browsers don't expose the
+// real folder path for security reasons, so the text input keeps whatever the
+// user typed (it's what gets baked into the generated YAMLs) — the picker only
+// supplies filenames.
+document.getElementById("csvRootBrowse").addEventListener("click", () => {
+  document.getElementById("csvRootPicker").click();
+});
+document.getElementById("csvRootPicker").addEventListener("change", (ev) => {
+  const files = Array.from(ev.target.files || []);
+  const csvs = Array.from(new Set(
+    files
+      .map((f) => f.name)
+      .filter((n) => n.toLowerCase().endsWith(".csv"))
+  )).sort();
+  KNOWN_CSVS = csvs;
+  // Auto-fill the text input with the picked folder name if it still looks
+  // like the placeholder — otherwise leave whatever the user typed in place.
+  if (files[0] && files[0].webkitRelativePath) {
+    const folderName = files[0].webkitRelativePath.split("/")[0];
+    const rootInp = document.getElementById("csvRoot");
+    if (rootInp && (rootInp.value.trim() === "" || rootInp.value.trim() === DEFAULT_CSV_ROOT)) {
+      rootInp.value = folderName;
+    }
+  }
+  const status = document.getElementById("csvRootStatus");
+  if (status) status.textContent = `(${csvs.length} csv${csvs.length === 1 ? "" : "s"} loaded)`;
+  refreshBatchOpsSelects();
+  renderAll();
+  // Reset the input so picking the same folder again still fires `change`.
+  ev.target.value = "";
 });
 document.getElementById("cluster").addEventListener("change", () => {
   renderPreview();
