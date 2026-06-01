@@ -898,7 +898,7 @@ function makeExperiment(name) {
     phases: PHASE_DEFS.map((def, i) => {
       const p = clonePhaseBase();
       def.overrides(p);
-      p._open = i === 0;  // first phase open by default
+      p._open = false;  // all phases start collapsed; user clicks to expand
       return p;
     }),
   };
@@ -1601,7 +1601,7 @@ function renderTopSection(phase, refresh, base) {
 function renderPhase(exp, expIdx, phaseIdx, refresh) {
   const phase = exp.phases[phaseIdx];
   const def = PHASE_DEFS[phaseIdx];
-  if (typeof phase._open !== "boolean") phase._open = phaseIdx === 0;
+  if (typeof phase._open !== "boolean") phase._open = false;
   const base = `e${expIdx}.p${phaseIdx}`;
   const header = el("div", { class: "phase-head", onclick: () => {
     phase._open = !phase._open;
@@ -2338,7 +2338,7 @@ function yamlToPhase(yamlObj, phaseIdx) {
   // Start from defaults, then merge known fields.
   const phase = clonePhaseBase();
   PHASE_DEFS[phaseIdx].overrides(phase);
-  phase._open = phaseIdx === 0;
+  phase._open = false;  // imported phases also start collapsed
 
   if (!yamlObj || typeof yamlObj !== "object") return phase;
 
