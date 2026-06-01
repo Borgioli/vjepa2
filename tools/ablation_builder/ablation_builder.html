@@ -204,6 +204,7 @@
   .csv-picker label:hover { background: var(--panel2); }
   .csv-picker input[type=checkbox] { accent-color: var(--accent); margin: 0; }
   .csv-picker label.hidden { display: none; }
+  .csv-picker-empty { padding: 10px 12px; font-size: 12px; color: var(--muted); font-style: italic; line-height: 1.45; }
   .csv-picker-controls { display: flex; gap: 6px; margin-bottom: 6px; align-items: center; }
   .csv-picker-controls button { font-size: 11px; padding: 3px 9px; }
   .csv-picker-controls input { flex: 1; background: #ffffff; color: var(--text); border: 1px solid var(--border); padding: 5px 8px; border-radius: 6px; font-size: 12px; font-family: ui-monospace, "SF Mono", monospace; }
@@ -1842,13 +1843,10 @@ function renderAll() {
 // Batch operations: propagate dataset composition and sweep value
 // =====================================================================
 function allKnownCsvs() {
-  const seen = new Set(KNOWN_CSVS);
-  for (const exp of state.experiments) {
-    for (const phase of exp.phases) {
-      for (const d of phase.datasets) seen.add(d.csv);
-    }
-  }
-  return Array.from(seen);
+  // Only CSVs loaded from the user-picked folder. Defaults baked into
+  // experiments are intentionally excluded — the Sweep picker should reflect
+  // what's actually on disk in the folder the user pointed at.
+  return Array.from(new Set(KNOWN_CSVS));
 }
 
 function setSelectOptions(sel, options, preferValue) {
@@ -1881,21 +1879,28 @@ function refreshBatchOpsSelects() {
   }
   const filter = (document.getElementById("sweepCsvFilter")?.value || "").trim().toLowerCase();
   sweepCsv.innerHTML = "";
-  for (const csv of csvs) {
-    const cb = document.createElement("input");
-    cb.type = "checkbox";
-    cb.value = csv;
-    cb.checked = sweepCsvSelection.has(csv);
-    cb.addEventListener("change", () => {
-      if (cb.checked) sweepCsvSelection.add(csv);
-      else sweepCsvSelection.delete(csv);
-      updateSweepCsvCount();
-    });
-    const label = document.createElement("label");
-    if (filter && !csv.toLowerCase().includes(filter)) label.classList.add("hidden");
-    label.appendChild(cb);
-    label.appendChild(document.createTextNode(csv));
-    sweepCsv.appendChild(label);
+  if (csvs.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "csv-picker-empty";
+    empty.textContent = "No CSVs loaded yet — click “Browse…” next to “CSV root folder” above and pick the folder containing your .csv files.";
+    sweepCsv.appendChild(empty);
+  } else {
+    for (const csv of csvs) {
+      const cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.value = csv;
+      cb.checked = sweepCsvSelection.has(csv);
+      cb.addEventListener("change", () => {
+        if (cb.checked) sweepCsvSelection.add(csv);
+        else sweepCsvSelection.delete(csv);
+        updateSweepCsvCount();
+      });
+      const label = document.createElement("label");
+      if (filter && !csv.toLowerCase().includes(filter)) label.classList.add("hidden");
+      label.appendChild(cb);
+      label.appendChild(document.createTextNode(csv));
+      sweepCsv.appendChild(label);
+    }
   }
   updateSweepCsvCount();
   updateBatchOpsPreviews();
