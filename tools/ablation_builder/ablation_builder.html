@@ -1,0 +1,3416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>V-JEPA2.1 Ablation Builder</title>
+<script src="https://cdn.jsdelivr.net/npm/js-yaml@4.1.0/dist/js-yaml.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<!-- vis-network (npm: vis-network) loaded via CDN so the static HTML works without a node server -->
+<script src="https://cdn.jsdelivr.net/npm/vis-network@9.1.9/standalone/umd/vis-network.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/vis-network@9.1.9/styles/vis-network.min.css" />
+<style>
+  :root {
+    --bg: #f5f5f7;
+    --panel: #ffffff;
+    --panel2: #fafafc;
+    --border: #d2d2d7;
+    --border-strong: #b8b8bf;
+    --text: #1d1d1f;
+    --muted: #6e6e73;
+    --accent: #007aff;
+    --accent-hover: #0a84ff;
+    --accent-soft: #e8f1ff;
+    --accent2: #34c759;
+    --warn: #ff3b30;
+    --code-bg: #f5f5f7;
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
+    --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.06);
+    /* Argonne-inspired palette + per-section accents (used for the
+       coloured left rails on every config block). Kept desaturated so
+       the data still reads as the foreground. */
+    --argonne-blue: #0072ce;
+    --argonne-blue-dark: #00549e;
+    --argonne-cyan: #00b5e2;
+    --sec-toplevel:     #8e8e93;
+    --sec-datasets:     #34c759;
+    --sec-data:         #0072ce;
+    --sec-data-aug:     #af52de;
+    --sec-loss:         #ff3b30;
+    --sec-mask:         #ff2d55;
+    --sec-meta:         #ff9500;
+    --sec-model:        #5ac8fa;
+    --sec-optimization: #ffcc00;
+    /* Numeric values get a subtle blue tint so they stand out from
+       string fields without shouting. */
+    --num-ink: #0a4a8f;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); -webkit-font-smoothing: antialiased; }
+  header { padding: 14px 22px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 12px; position: sticky; top: 0; background: rgba(245, 245, 247, 0.92); backdrop-filter: saturate(180%) blur(20px); -webkit-backdrop-filter: saturate(180%) blur(20px); z-index: 5; }
+  header h1 { font-size: 15px; margin: 0; font-weight: 600; letter-spacing: -0.01em; }
+  /* ---- Pixel-art Argonne A logo + floating animation ---- */
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .pixel-logo {
+    width: 38px; height: 38px;
+    display: inline-block;
+    background: linear-gradient(135deg, #ffffff 0%, #eaf4ff 100%);
+    border-radius: 7px;
+    box-shadow: 0 2px 6px rgba(0, 114, 206, 0.28), inset 0 0 0 1px rgba(0, 114, 206, 0.18);
+    animation: brand-float 3.4s ease-in-out infinite;
+    flex-shrink: 0;
+    image-rendering: pixelated;
+    /* SVG is set inline via the ::before pseudo so we can keep the box
+       styling separate from the glyph and reuse Argonne brand colours
+       from CSS variables. */
+    position: relative;
+    overflow: hidden;
+  }
+  .pixel-logo::before {
+    content: "";
+    position: absolute; inset: 4px;
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: contain;
+    image-rendering: pixelated;
+    /* 10×10 pixel-art "A" glyph. Each <rect> is one logical pixel.
+       Blue body, cyan apex highlight, navy crossbar — pure SVG, no
+       external request. */
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10' shape-rendering='crispEdges'>\
+<rect x='4' y='0' width='2' height='1' fill='%2300b5e2'/>\
+<rect x='3' y='1' width='1' height='1' fill='%230072ce'/>\
+<rect x='4' y='1' width='2' height='1' fill='%2300b5e2'/>\
+<rect x='6' y='1' width='1' height='1' fill='%230072ce'/>\
+<rect x='3' y='2' width='1' height='1' fill='%230072ce'/>\
+<rect x='6' y='2' width='1' height='1' fill='%230072ce'/>\
+<rect x='2' y='3' width='1' height='1' fill='%230072ce'/>\
+<rect x='7' y='3' width='1' height='1' fill='%230072ce'/>\
+<rect x='2' y='4' width='1' height='1' fill='%230072ce'/>\
+<rect x='3' y='4' width='4' height='1' fill='%2300549e'/>\
+<rect x='7' y='4' width='1' height='1' fill='%230072ce'/>\
+<rect x='1' y='5' width='1' height='1' fill='%230072ce'/>\
+<rect x='8' y='5' width='1' height='1' fill='%230072ce'/>\
+<rect x='1' y='6' width='1' height='1' fill='%230072ce'/>\
+<rect x='8' y='6' width='1' height='1' fill='%230072ce'/>\
+<rect x='0' y='7' width='2' height='1' fill='%230072ce'/>\
+<rect x='8' y='7' width='2' height='1' fill='%230072ce'/>\
+<rect x='0' y='8' width='1' height='1' fill='%2300549e'/>\
+<rect x='9' y='8' width='1' height='1' fill='%2300549e'/>\
+</svg>");
+  }
+  @keyframes brand-float {
+    0%, 100% { transform: translateY(0) rotate(0deg); }
+    25%      { transform: translateY(-3px) rotate(-1.2deg); }
+    50%      { transform: translateY(-5px) rotate(0deg); }
+    75%      { transform: translateY(-3px) rotate(1.2deg); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .pixel-logo { animation: none; }
+  }
+  .brand-text { display: flex; flex-direction: column; gap: 0; line-height: 1.1; }
+  .brand-text .institution {
+    font-size: 9px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--argonne-blue); opacity: 0.85;
+  }
+  .brand-text h1 { font-size: 15px; margin: 0; font-weight: 600; letter-spacing: -0.01em; }
+  header .spacer { flex: 1; }
+  button { background: #ffffff; color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 6px 14px; cursor: pointer; font-size: 13px; font-family: inherit; transition: background 0.12s ease, border-color 0.12s ease, transform 0.06s ease; }
+  button:hover { background: #f0f0f2; border-color: var(--border-strong); }
+  button:active { transform: scale(0.98); }
+  button.primary { background: var(--accent); color: #ffffff; border-color: var(--accent); font-weight: 500; }
+  button.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+  button.warn { background: #ffffff; color: var(--warn); border-color: var(--border); }
+  button.warn:hover { background: #fff0ef; border-color: var(--warn); }
+  .layout { display: grid; grid-template-columns: minmax(0, 1fr) 540px; gap: 0; height: calc(100vh - 57px); }
+  .builder { overflow-y: auto; padding: 22px; }
+  .preview { border-left: 1px solid var(--border); background: #ffffff; overflow-y: auto; }
+  .preview-tabs { position: sticky; top: 0; background: rgba(255, 255, 255, 0.94); backdrop-filter: saturate(180%) blur(20px); -webkit-backdrop-filter: saturate(180%) blur(20px); display: flex; flex-wrap: wrap; gap: 4px; padding: 10px 14px; border-bottom: 1px solid var(--border); z-index: 2; }
+  .preview-tabs button { padding: 3px 10px; font-size: 12px; border-radius: 6px; }
+  .preview-tabs button.active { background: var(--accent); color: #ffffff; border-color: var(--accent); }
+  pre.preview-body { margin: 0; padding: 16px; font-size: 12px; line-height: 1.55; white-space: pre-wrap; word-break: break-word; color: #1d1d1f; font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace; background: #ffffff; }
+  .experiment { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 16px; box-shadow: var(--shadow-sm); overflow: hidden; }
+  .exp-head { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-bottom: 1px solid var(--border); background: var(--panel2); }
+  .exp-head input.exp-name { flex: 1; background: #ffffff; border: 1px solid var(--border); padding: 7px 10px; border-radius: 8px; color: var(--text); font-size: 14px; font-weight: 600; font-family: inherit; }
+  .exp-head input.exp-name:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .exp-head .idx { color: var(--muted); font-size: 12px; min-width: 24px; font-variant-numeric: tabular-nums; }
+  .phases { padding: 8px 14px 14px 14px; }
+  .phase { border: 1px solid var(--border); border-radius: 10px; margin-top: 10px; background: #ffffff; overflow: hidden; }
+  .phase-head { padding: 10px 14px; cursor: pointer; user-select: none; display: flex; align-items: center; gap: 10px; background: var(--panel2); }
+  .phase-head:hover { background: #f0f0f2; }
+  .phase-head .chev { color: var(--muted); transition: transform 0.15s ease; display: inline-block; }
+  .phase.open .phase-head .chev { transform: rotate(90deg); }
+  .phase-head .pname { font-weight: 600; font-size: 13px; }
+  .phase-head .pdesc { color: var(--muted); font-size: 11px; font-family: ui-monospace, "SF Mono", monospace; }
+  .phase-body { padding: 12px 14px 16px 14px; border-top: 1px solid var(--border); display: none; }
+  .phase.open .phase-body { display: block; }
+  .section { margin-top: 12px; border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; background: var(--panel2); }
+  .section h4 { margin: 0 0 10px 0; font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
+  .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 14px; }
+  .grid.cols3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+  .field label { font-size: 11px; color: var(--muted); font-weight: 500; }
+  .field input, .field select, .field textarea { background: #ffffff; color: var(--text); border: 1px solid var(--border); padding: 6px 9px; border-radius: 6px; font-size: 12px; font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace; transition: border-color 0.12s ease, box-shadow 0.12s ease; }
+  .field input:focus, .field select:focus, .field textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .field input:disabled { background: var(--panel2); color: var(--muted); }
+  .field input[type=checkbox] { width: auto; accent-color: var(--accent); }
+  .field.checkbox { flex-direction: row; align-items: center; gap: 8px; }
+  .field.checkbox label { font-size: 13px; color: var(--text); font-weight: 400; }
+  textarea { resize: vertical; min-height: 60px; }
+  .datasets { display: flex; flex-direction: column; gap: 4px; }
+  .dataset-row { display: grid; grid-template-columns: 24px minmax(0, 1fr) 90px 90px; gap: 8px; align-items: center; font-size: 12px; padding: 4px 6px; border-radius: 6px; }
+  .dataset-row:hover { background: #ffffff; }
+  .dataset-row .csvname { font-family: ui-monospace, "SF Mono", monospace; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dataset-row input[type=number] { background: #ffffff; color: var(--text); border: 1px solid var(--border); padding: 5px 7px; border-radius: 6px; font-size: 12px; }
+  .dataset-row input[type=checkbox] { accent-color: var(--accent); }
+  .dataset-row.disabled .csvname, .dataset-row.disabled input { opacity: 0.4; }
+  .dataset-controls { display: flex; gap: 8px; margin-bottom: 6px; }
+  .dataset-controls button { font-size: 11px; padding: 3px 9px; }
+  .add-csv-row { display: flex; gap: 6px; margin-top: 8px; }
+  .add-csv-row input { flex: 1; background: #ffffff; color: var(--text); border: 1px solid var(--border); padding: 6px 9px; border-radius: 6px; font-size: 12px; font-family: ui-monospace, "SF Mono", monospace; }
+  .add-csv-row input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .mask-block { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin-top: 8px; background: #ffffff; }
+  .mask-head { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
+  .mask-head .ml { font-size: 11px; color: var(--muted); flex: 1; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; }
+  .help { font-size: 11px; color: var(--muted); margin: 6px 0 0 0; line-height: 1.4; }
+  .row-actions { display: flex; gap: 6px; margin-top: 10px; }
+  .preview-error { color: var(--warn); padding: 10px 14px; font-size: 12px; white-space: pre-wrap; }
+  .exp-actions { display: flex; gap: 6px; }
+  .exp-actions button { font-size: 12px; padding: 4px 10px; }
+  .toolbar { display: flex; gap: 10px; margin-bottom: 16px; align-items: flex-end; flex-wrap: wrap; background: var(--panel); padding: 12px 14px; border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow-sm); }
+  .toolbar .meta-input { display: flex; flex-direction: column; gap: 4px; }
+  .toolbar .meta-input label { font-size: 11px; color: var(--muted); font-weight: 500; }
+  .toolbar .meta-input input, .toolbar .meta-input select { background: #ffffff; color: var(--text); border: 1px solid var(--border); padding: 6px 9px; border-radius: 6px; font-size: 12px; font-family: ui-monospace, "SF Mono", monospace; }
+  .toolbar .meta-input input:focus, .toolbar .meta-input select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  details summary { cursor: pointer; color: var(--muted); font-size: 12px; }
+  .pill { display: inline-block; padding: 2px 8px; border-radius: 99px; background: var(--accent-soft); color: var(--accent); font-size: 11px; font-weight: 500; margin-left: 6px; }
+  .batch-ops { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow-sm); margin-bottom: 16px; overflow: hidden; }
+  .batch-ops > summary { padding: 10px 14px; font-size: 13px; font-weight: 600; color: var(--text); cursor: pointer; list-style: none; display: flex; align-items: center; gap: 8px; background: var(--panel2); }
+  .batch-ops > summary::-webkit-details-marker { display: none; }
+  .batch-ops > summary::before { content: "▸"; color: var(--muted); transition: transform 0.15s ease; display: inline-block; }
+  .batch-ops[open] > summary::before { transform: rotate(90deg); }
+  .batch-ops .ops-body { padding: 12px 14px; display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .batch-ops .op { border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; background: var(--panel2); }
+  .batch-ops .op h5 { margin: 0 0 4px 0; font-size: 12px; font-weight: 600; color: var(--text); }
+  .batch-ops .op p.help { margin: 0 0 10px 0; }
+  .batch-ops .op .row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 10px; align-items: end; }
+  .batch-ops .op .row.cols3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .batch-ops .op label { font-size: 11px; color: var(--muted); font-weight: 500; display: block; margin-bottom: 3px; }
+  .batch-ops .op input, .batch-ops .op select { width: 100%; background: #ffffff; color: var(--text); border: 1px solid var(--border); padding: 6px 9px; border-radius: 6px; font-size: 12px; font-family: ui-monospace, "SF Mono", monospace; }
+  .batch-ops .op input:focus, .batch-ops .op select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .batch-ops .op .actions { display: flex; gap: 6px; margin-top: 10px; align-items: center; flex-wrap: wrap; }
+  .batch-ops .op .actions button { font-size: 12px; padding: 5px 11px; }
+  .batch-ops .op .preview-line { font-size: 11px; color: var(--muted); font-family: ui-monospace, "SF Mono", monospace; }
+  .csv-picker { border: 1px solid var(--border); border-radius: 6px; background: #ffffff; max-height: 160px; overflow-y: auto; padding: 4px 2px; }
+  .csv-picker label { display: flex; align-items: center; gap: 8px; padding: 3px 8px; font-size: 12px; font-family: ui-monospace, "SF Mono", monospace; color: var(--text); cursor: pointer; border-radius: 4px; margin: 0; }
+  .csv-picker label:hover { background: var(--panel2); }
+  .csv-picker input[type=checkbox] { accent-color: var(--accent); margin: 0; }
+  .csv-picker label.hidden { display: none; }
+  .csv-picker-controls { display: flex; gap: 6px; margin-bottom: 6px; align-items: center; }
+  .csv-picker-controls button { font-size: 11px; padding: 3px 9px; }
+  .csv-picker-controls input { flex: 1; background: #ffffff; color: var(--text); border: 1px solid var(--border); padding: 5px 8px; border-radius: 6px; font-size: 12px; font-family: ui-monospace, "SF Mono", monospace; }
+  .csv-count { color: var(--muted); font-weight: 400; font-size: 11px; }
+  @media (max-width: 1100px) { .batch-ops .ops-body { grid-template-columns: 1fr; } }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 99px; border: 2px solid var(--bg); }
+  ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+
+  /* ---- Flow visualization modal ---- */
+  .viz-modal-backdrop {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.45);
+    display: none; align-items: stretch; justify-content: stretch;
+    z-index: 100;
+  }
+  .viz-modal-backdrop.open { display: flex; }
+  .viz-modal {
+    margin: 24px; flex: 1; background: var(--panel); border: 1px solid var(--border);
+    border-radius: 14px; box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  .viz-header {
+    display: flex; align-items: center; gap: 10px; padding: 12px 16px;
+    border-bottom: 1px solid var(--border); background: var(--panel2);
+  }
+  .viz-header h2 { margin: 0; font-size: 14px; font-weight: 600; }
+  .viz-header .help { margin: 0; }
+  .viz-header .spacer { flex: 1; }
+  .viz-toolbar {
+    display: flex; gap: 8px; padding: 8px 16px;
+    border-bottom: 1px solid var(--border); background: #fff; flex-wrap: wrap;
+    align-items: center;
+  }
+  .viz-toolbar button { font-size: 12px; padding: 5px 12px; }
+  .viz-toolbar .vsep { width: 1px; height: 20px; background: var(--border); margin: 0 4px; }
+  .viz-toolbar .sel-info {
+    font-size: 12px; color: var(--muted); font-family: ui-monospace, "SF Mono", monospace;
+  }
+  .viz-body { flex: 1; display: flex; min-height: 0; }
+  .viz-graph { flex: 1; background: #fafbfc; min-width: 0; }
+  .viz-side {
+    width: 280px; border-left: 1px solid var(--border); background: var(--panel2);
+    overflow-y: auto; padding: 12px 14px; font-size: 12px;
+  }
+  .viz-side h3 { margin: 0 0 8px 0; font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
+  .viz-side .kv { display: grid; grid-template-columns: 90px 1fr; gap: 4px 8px; margin-bottom: 10px; font-family: ui-monospace, "SF Mono", monospace; }
+  .viz-side .kv .k { color: var(--muted); }
+  .viz-legend {
+    display: flex; gap: 12px; font-size: 11px; color: var(--muted); align-items: center;
+    margin-left: auto;
+  }
+  .viz-legend .swatch {
+    display: inline-block; width: 10px; height: 10px; border-radius: 2px; vertical-align: middle; margin-right: 4px;
+  }
+
+  /* ---- Section colour rails ----
+     Each config section gets a 3px coloured left border + a tinted h4
+     dot so the eye can navigate the dense builder pane at a glance.
+     The colours come from the --sec-* vars above. We target by the
+     section's h4 text content using :has() (modern browsers) with a
+     graceful fallback: if :has() is unsupported, every section just
+     shows the default border. */
+  .section { position: relative; border-left-width: 3px; transition: border-color 0.18s ease; }
+  .section h4 { position: relative; padding-left: 14px; }
+  .section h4::before {
+    content: ""; position: absolute; left: 0; top: 50%;
+    transform: translateY(-50%);
+    width: 8px; height: 8px; border-radius: 2px;
+    background: var(--border-strong);
+  }
+  .section:has(> h4:first-child) { /* progressive enhancement guard */ }
+  .section:has(> h4) { /* hook */ }
+  /* Per-section accents — matched by the section's h4 text. */
+  .section.sec-toplevel     { border-left-color: var(--sec-toplevel); }
+  .section.sec-toplevel     h4::before { background: var(--sec-toplevel); }
+  .section.sec-datasets     { border-left-color: var(--sec-datasets); }
+  .section.sec-datasets     h4::before { background: var(--sec-datasets); }
+  .section.sec-data         { border-left-color: var(--sec-data); }
+  .section.sec-data         h4::before { background: var(--sec-data); }
+  .section.sec-data-aug     { border-left-color: var(--sec-data-aug); }
+  .section.sec-data-aug     h4::before { background: var(--sec-data-aug); }
+  .section.sec-loss         { border-left-color: var(--sec-loss); }
+  .section.sec-loss         h4::before { background: var(--sec-loss); }
+  .section.sec-mask         { border-left-color: var(--sec-mask); }
+  .section.sec-mask         h4::before { background: var(--sec-mask); }
+  .section.sec-meta         { border-left-color: var(--sec-meta); }
+  .section.sec-meta         h4::before { background: var(--sec-meta); }
+  .section.sec-model        { border-left-color: var(--sec-model); }
+  .section.sec-model        h4::before { background: var(--sec-model); }
+  .section.sec-optimization { border-left-color: var(--sec-optimization); }
+  .section.sec-optimization h4::before { background: var(--sec-optimization); }
+
+  /* Numeric and array inputs get a soft blue ink so values pop without
+     screaming. Text and select inputs keep the default colour. */
+  .field input[type=number],
+  .field input[data-numeric="true"] { color: var(--num-ink); font-weight: 500; }
+  .dataset-row input[type=number] { color: var(--num-ink); font-weight: 500; }
+  .batch-ops .op input[type=number] { color: var(--num-ink); font-weight: 500; }
+
+  /* Subtle hover lift on experiment cards. */
+  .experiment { transition: box-shadow 0.18s ease, transform 0.18s ease; }
+  .experiment:hover { box-shadow: var(--shadow-md); }
+
+  /* Phase header chevron coloured per phase index so the three phases
+     are visually distinct even when all collapsed. */
+  .phase[data-phase="0"] { border-left: 3px solid #34c759; }
+  .phase[data-phase="1"] { border-left: 3px solid #ff9500; }
+  .phase[data-phase="2"] { border-left: 3px solid #af52de; }
+  .phase[data-phase="0"] .phase-head .chev { color: #34c759; }
+  .phase[data-phase="1"] .phase-head .chev { color: #ff9500; }
+  .phase[data-phase="2"] .phase-head .chev { color: #af52de; }
+
+  /* Pill — make the experiment count chip Argonne-blue. */
+  .pill { background: rgba(0, 114, 206, 0.12); color: var(--argonne-blue); }
+
+  /* Header: a faint gradient underline so the brand row feels grounded. */
+  header {
+    background: linear-gradient(180deg, rgba(245,245,247,0.96) 0%, rgba(245,245,247,0.88) 100%);
+    border-bottom: 1px solid var(--border);
+    box-shadow: 0 1px 0 rgba(0,114,206,0.06);
+  }
+
+  /* ---- Guided tour ---- */
+  .tour-overlay {
+    position: fixed; inset: 0; pointer-events: auto;
+    z-index: 200; display: none;
+    /* The dim layer uses a radial-gradient mask hole punched around the
+       highlighted target so the focused element stays bright while the
+       rest of the page darkens. Set via inline style at runtime. */
+    background: rgba(15, 20, 30, 0.55);
+    transition: background 0.2s ease;
+  }
+  .tour-overlay.open { display: block; }
+  .tour-spotlight {
+    position: fixed; z-index: 201; pointer-events: none;
+    border-radius: 10px;
+    box-shadow:
+      0 0 0 4px rgba(0, 114, 206, 0.85),
+      0 0 0 9999px rgba(15, 20, 30, 0.55);
+    transition: top 0.25s ease, left 0.25s ease, width 0.25s ease, height 0.25s ease;
+    animation: tour-pulse 1.8s ease-in-out infinite;
+  }
+  @keyframes tour-pulse {
+    0%, 100% { box-shadow: 0 0 0 4px rgba(0, 114, 206, 0.85), 0 0 0 9999px rgba(15, 20, 30, 0.55); }
+    50%      { box-shadow: 0 0 0 7px rgba(0, 181, 226, 0.85), 0 0 0 9999px rgba(15, 20, 30, 0.55); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .tour-spotlight { animation: none; }
+  }
+  .tour-bubble {
+    position: fixed; z-index: 202;
+    max-width: 320px; min-width: 220px;
+    background: #ffffff; color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+    padding: 14px 16px 12px 16px;
+    font-size: 13px; line-height: 1.5;
+    transition: top 0.25s ease, left 0.25s ease, opacity 0.18s ease;
+    cursor: pointer;
+    user-select: none;
+  }
+  .tour-bubble .tour-step-num {
+    display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--argonne-blue); margin-bottom: 4px;
+  }
+  .tour-bubble h3 {
+    margin: 0 0 6px 0; font-size: 14px; font-weight: 600; color: var(--text);
+  }
+  .tour-bubble p { margin: 0 0 10px 0; color: var(--text); }
+  .tour-bubble .tour-bubble-actions {
+    display: flex; align-items: center; gap: 8px;
+    border-top: 1px solid var(--border); padding-top: 8px; margin-top: 4px;
+  }
+  .tour-bubble .tour-progress {
+    font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums;
+  }
+  .tour-bubble .tour-spacer { flex: 1; }
+  .tour-bubble button {
+    font-size: 12px; padding: 4px 10px;
+  }
+  .tour-bubble button.primary {
+    background: var(--argonne-blue); border-color: var(--argonne-blue);
+  }
+  .tour-bubble button.primary:hover {
+    background: var(--argonne-blue-dark); border-color: var(--argonne-blue-dark);
+  }
+  /* Tiny arrow pointing from the bubble toward the target.
+     Direction is set via data-arrow attribute. */
+  .tour-bubble::before {
+    content: ""; position: absolute; width: 12px; height: 12px;
+    background: #ffffff;
+    border: 1px solid var(--border); border-right: none; border-bottom: none;
+    transform: rotate(45deg);
+  }
+  .tour-bubble[data-arrow="left"]::before   { left: -7px;  top: 18px; }
+  .tour-bubble[data-arrow="right"]::before  { right: -7px; top: 18px; transform: rotate(225deg); }
+  .tour-bubble[data-arrow="top"]::before    { top: -7px;   left: 18px; transform: rotate(45deg); }
+  .tour-bubble[data-arrow="bottom"]::before { bottom: -7px; left: 18px; transform: rotate(225deg); border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); border-top: none; border-left: none; }
+  /* For centered intro bubbles, hide the arrow. */
+  .tour-bubble[data-arrow="none"]::before { display: none; }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand" title="Argonne-inspired pixel mark · click for a little spin">
+    <div class="pixel-logo" id="pixelLogo" aria-hidden="true"></div>
+    <div class="brand-text">
+      <span class="institution">Argonne · V-JEPA2.1</span>
+      <h1>Ablation Builder</h1>
+    </div>
+  </div>
+  <span class="pill" id="expCount">0 experiments</span>
+  <span class="spacer"></span>
+  <button id="loadSh">Load .sh / YAMLs</button>
+  <input type="file" id="loadShFile" accept=".sh,.yaml,.yml" multiple style="display:none" />
+  <button id="exportState">Export config (JSON)</button>
+  <button id="importState">Import config (JSON)</button>
+  <input type="file" id="importFile" accept="application/json" style="display:none" />
+  <button id="addExp">+ Add experiment</button>
+  <button id="visualizeFlow">Visualize flow</button>
+  <button id="helpTour" title="Guided tour of the builder" aria-label="Help" style="width: 30px; padding: 6px 0; font-weight: 700; color: var(--argonne-blue); border-color: var(--argonne-blue);">?</button>
+  <button class="primary" id="downloadZip">Download ZIP</button>
+</header>
+
+<!-- =====================================================================
+     Flow visualization modal (vis-network)
+     ===================================================================== -->
+<div id="vizModal" class="viz-modal-backdrop">
+  <div class="viz-modal">
+    <div class="viz-header">
+      <h2>Ablation flow</h2>
+      <p class="help">Each experiment is a chain: Phase 1 → Phase 2 → Phase 3. Click a node to inspect/delete. Use the toolbar to add experiments or new phase chains.</p>
+      <div class="viz-legend">
+        <span><span class="swatch" style="background:#007aff"></span>experiment</span>
+        <span><span class="swatch" style="background:#34c759"></span>phase 1</span>
+        <span><span class="swatch" style="background:#ff9500"></span>phase 2</span>
+        <span><span class="swatch" style="background:#af52de"></span>phase 3</span>
+      </div>
+      <div class="spacer"></div>
+      <button id="vizClose">Close</button>
+    </div>
+    <div class="viz-toolbar">
+      <button id="vizAddExp" class="primary">+ Add experiment block</button>
+      <button id="vizDuplicateSelected">Duplicate selected experiment</button>
+      <span class="vsep"></span>
+      <button id="vizDeleteSelected" class="warn">Delete selected</button>
+      <span class="vsep"></span>
+      <button id="vizFit">Fit to screen</button>
+      <button id="vizRelayout">Re-layout</button>
+      <span class="sel-info" id="vizSelInfo">(nothing selected)</span>
+    </div>
+    <div class="viz-body">
+      <div id="vizGraph" class="viz-graph"></div>
+      <div class="viz-side">
+        <h3>Selection</h3>
+        <div id="vizSideBody" style="color: var(--muted);">Click a node on the left.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- =====================================================================
+     Guided tour scaffold (one set of nodes, reused across steps)
+     ===================================================================== -->
+<div id="tourOverlay" class="tour-overlay" aria-hidden="true"></div>
+<div id="tourSpotlight" class="tour-spotlight" style="display: none;"></div>
+<div id="tourBubble" class="tour-bubble" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="tourBubbleTitle">
+  <span class="tour-step-num" id="tourStepNum">Step 1</span>
+  <h3 id="tourBubbleTitle">Welcome</h3>
+  <p id="tourBubbleBody">…</p>
+  <div class="tour-bubble-actions">
+    <span class="tour-progress" id="tourProgress">1 / 1</span>
+    <span class="tour-spacer"></span>
+    <button id="tourSkip">Skip</button>
+    <button id="tourPrev">Back</button>
+    <button id="tourNext" class="primary">Next →</button>
+  </div>
+</div>
+
+<div class="layout">
+  <div class="builder">
+    <div class="toolbar">
+      <div class="meta-input">
+        <label>Project root (where the .sh and configs/ live)</label>
+        <input id="projectRoot" type="text" value="/path/to/vjepa2" />
+      </div>
+      <div class="meta-input">
+        <label>Checkpoint root (folder base for each experiment)</label>
+        <input id="checkpointRoot" type="text" value="/path/to/checkpoints/ablations" />
+      </div>
+      <div class="meta-input">
+        <label>Configs subdir (under project root)</label>
+        <input id="configsSubdir" type="text" value="configs/train_2_1/vitl_Neil" />
+      </div>
+      <div class="meta-input">
+        <label>Launcher .sh filename</label>
+        <input id="launcherName" type="text" value="run_ablation_batch.sh" />
+      </div>
+      <div class="meta-input">
+        <label>Cluster</label>
+        <select id="cluster" style="background: var(--panel); color: var(--text); border: 1px solid var(--border); padding: 5px 8px; border-radius: 4px; font-size: 12px; font-family: ui-monospace, monospace;">
+          <option value="sophia">Sophia (venv: vjepa, 8 GPUs/node)</option>
+          <option value="polaris">Polaris (venv: vjepa_polaris, 4 GPUs/node)</option>
+        </select>
+      </div>
+      <div class="meta-input">
+        <label>Override num GPUs (blank = cluster default)</label>
+        <input id="numGpusOverride" type="text" value="" placeholder="auto" />
+      </div>
+      <div class="meta-input">
+        <label>Num nodes (1 = single-node; &gt;1 uses mpiexec multi-node launch on Polaris)</label>
+        <input id="numNodes" type="text" value="1" placeholder="1" />
+      </div>
+      <div class="meta-input">
+        <label>Sophia venv python</label>
+        <input id="sophiaPythonBin" type="text" value="/path/to/venvs/vjepa/bin/python" />
+      </div>
+      <div class="meta-input">
+        <label>Polaris venv python</label>
+        <input id="polarisPythonBin" type="text" value="/path/to/venvs/vjepa_polaris/bin/python" />
+      </div>
+      <div class="meta-input">
+        <label>CSV root folder</label>
+        <input id="csvRoot" type="text" value="/path/to/app/csv_data" />
+      </div>
+    </div>
+
+    <details class="batch-ops" id="batchOps">
+      <summary>Batch operations</summary>
+      <div class="ops-body">
+        <div class="op">
+          <h5>Propagate dataset composition</h5>
+          <p class="help">Copy the dataset list (enabled flag + weight + fpcs) from one experiment to every other experiment. Choose whether to copy from a single source phase to the same phase across experiments, or mirror all 3 phases together.</p>
+          <div class="row cols3">
+            <div>
+              <label>From experiment</label>
+              <select id="propFromExp"></select>
+            </div>
+            <div>
+              <label>From phase</label>
+              <select id="propFromPhase">
+                <option value="0">phase 1 (pretrain)</option>
+                <option value="1">phase 2 (main)</option>
+                <option value="2">phase 3 (cooldown)</option>
+                <option value="all">all 3 phases (per-phase copy)</option>
+              </select>
+            </div>
+            <div>
+              <label>To experiments</label>
+              <select id="propToScope">
+                <option value="others">all other experiments</option>
+                <option value="after">experiments after the source</option>
+                <option value="before">experiments before the source</option>
+              </select>
+            </div>
+          </div>
+          <div class="actions">
+            <button id="propApply" class="primary">Apply propagation</button>
+            <span class="preview-line" id="propPreview"></span>
+          </div>
+        </div>
+
+        <div class="op">
+          <h5>Sweep value across experiments</h5>
+          <p class="help">Set a CSV's weight (or fpcs) per experiment using <code>value(idx) = start + idx * step</code>. The CSV is auto-enabled where the formula gives a positive weight; clamps to 0 otherwise. Index starts at 0 for the first selected experiment.</p>
+          <div class="row cols3">
+            <div style="grid-column: span 3;">
+              <label>CSVs <span id="sweepCsvCount" class="csv-count">(0 selected)</span></label>
+              <div class="csv-picker-controls">
+                <button type="button" id="sweepCsvAll">Select all</button>
+                <button type="button" id="sweepCsvNone">Clear</button>
+                <input id="sweepCsvFilter" type="text" placeholder="filter…" />
+              </div>
+              <div id="sweepCsv" class="csv-picker"></div>
+            </div>
+            <div>
+              <label>Field</label>
+              <select id="sweepField">
+                <option value="weight">weight</option>
+                <option value="fpcs">fpcs</option>
+              </select>
+            </div>
+            <div>
+              <label>Phase target</label>
+              <select id="sweepPhase">
+                <option value="all">all 3 phases</option>
+                <option value="0">phase 1 only</option>
+                <option value="1">phase 2 only</option>
+                <option value="2">phase 3 only</option>
+              </select>
+            </div>
+          </div>
+          <div class="row cols3" style="margin-top:8px;">
+            <div>
+              <label>Start (exp 0)</label>
+              <input id="sweepStart" type="number" step="0.01" value="0.1" />
+            </div>
+            <div>
+              <label>Step (per exp)</label>
+              <input id="sweepStep" type="number" step="0.01" value="0.2" />
+            </div>
+            <div>
+              <label>Range</label>
+              <select id="sweepScope">
+                <option value="all">all experiments</option>
+                <option value="from1">from experiment 2 onward</option>
+              </select>
+            </div>
+          </div>
+          <div class="actions">
+            <button id="sweepApply" class="primary">Apply sweep</button>
+            <span class="preview-line" id="sweepPreview"></span>
+          </div>
+        </div>
+      </div>
+    </details>
+
+    <div id="experiments"></div>
+    <div class="row-actions">
+      <button id="addExp2">+ Add experiment</button>
+      <button id="duplicateLast">Duplicate last</button>
+    </div>
+  </div>
+
+  <div class="preview">
+    <div class="preview-tabs" id="previewTabs"></div>
+    <pre class="preview-body" id="previewBody">Add an experiment to see the generated YAML.</pre>
+  </div>
+</div>
+
+<script>
+// =====================================================================
+// Available CSV datasets (sourced from app/csv_vjepa_reduced/)
+// =====================================================================
+const DEFAULT_CSV_ROOT = "/path/to/app/csv_data";
+function getCsvRoot() {
+  const inp = document.getElementById("csvRoot");
+  const v = inp ? inp.value.trim().replace(/\/+$/, "") : "";
+  return v || DEFAULT_CSV_ROOT;
+}
+const KNOWN_CSVS = [
+  "path_CRCD.csv",
+  "path_EndoVis15.csv",
+  "path_JIGSAW.csv",
+  "path_SITL.csv",
+  "path_SITL_highres.csv",
+  "path_surgenet_robotic.csv",
+  "path_surgtoolloc2022.csv",
+  "path_SurgVisDom.csv",
+  "path_surgvu24.csv",
+  "path_miccai-2017.csv",
+  "path_miccai-endoseg.csv",
+];
+
+// =====================================================================
+// Baseline YAMLs (from configs/train_2_1/vitl_Neil/vitl16_ablation_all-datasets_single4/)
+// Exact field-for-field copies — every key here is editable in the UI.
+// The `folder` and `meta.pretrain_checkpoint` are recomputed per experiment.
+// =====================================================================
+const DEFAULT_DATASETS = [
+  { csv: "path_CRCD.csv",              enabled: true,  weight: 1,    fpcs: 16 },
+  { csv: "path_EndoVis15.csv",         enabled: true,  weight: 1,    fpcs: 16 },
+  { csv: "path_JIGSAW.csv",            enabled: true,  weight: 1,    fpcs: 16 },
+  { csv: "path_SITL.csv",              enabled: true,  weight: 1,    fpcs: 16 },
+  { csv: "path_surgenet_robotic.csv",  enabled: true,  weight: 1,    fpcs: 16 },
+  { csv: "path_surgtoolloc2022.csv",   enabled: true,  weight: 0.10, fpcs: 16 },
+  { csv: "path_SurgVisDom.csv",        enabled: true,  weight: 1,    fpcs: 16 },
+  { csv: "path_surgvu24.csv",          enabled: false, weight: 1,    fpcs: 16 },
+  { csv: "path_SITL_highres.csv",      enabled: false, weight: 1,    fpcs: 16 },
+  { csv: "path_miccai-2017.csv",       enabled: false, weight: 1,    fpcs: 16 },
+  { csv: "path_miccai-endoseg.csv",    enabled: false, weight: 1,    fpcs: 16 },
+];
+
+const MASK_DEFAULT = [
+  { aspect_ratio: [0.75, 1.5], full_complement: false, max_keep: null, max_temporal_keep: 1.0, num_blocks: 8, spatial_scale: [0.15, 0.15], temporal_scale: [1.0, 1.0] },
+  { aspect_ratio: [0.75, 1.5], full_complement: false, max_keep: null, max_temporal_keep: 1.0, num_blocks: 2, spatial_scale: [0.7, 0.7],   temporal_scale: [1.0, 1.0] },
+];
+
+function clonePhaseBase() {
+  return {
+    app: "vjepa_2_1",
+    nodes: 1,
+    tasks_per_node: 4,
+    cpus_per_task: 16,
+    mem_per_gpu: "40G",
+    folder: "",  // computed per experiment + phase
+    datasets: JSON.parse(JSON.stringify(DEFAULT_DATASETS)),
+    data: {
+      num_clips: 10,
+      dataset_type: "VideoDataset",
+      batch_size: 4,
+      crop_size: 256,
+      patch_size: 16,
+      tubelet_size: 2,
+      fps: 4,
+      num_workers: 4,
+      persistent_workers: true,
+      pin_mem: true,
+    },
+    data_aug: {
+      auto_augment: false,
+      motion_shift: false,
+      random_resize_aspect_ratio: [0.75, 1.35],
+      random_resize_scale: [0.3, 1.0],
+      reprob: 0.0,
+    },
+    loss: {
+      loss_exp: 1.0,
+      predict_all: true,
+      shift_by_n: 0,
+      weight_distance_loss: true,
+    },
+    mask: JSON.parse(JSON.stringify(MASK_DEFAULT)),
+    meta: {
+      context_encoder_key: null,
+      target_encoder_key: null,
+      dtype: "bfloat16",
+      eval_freq: 12000,
+      load_checkpoint: true,
+      load_predictor: false,
+      pretrain_checkpoint: "",
+      read_checkpoint: null,
+      save_every_freq: 2000,
+      seed: 239,
+      use_sdpa: true,
+    },
+    model: {
+      has_cls_first: false,
+      img_temporal_dim_size: 1,
+      interpolate_rope: true,
+      is_causal: false,
+      lambda_progressive: false,
+      lambda_value_vid: 0.5,
+      modality_embedding: true,
+      model_name: "vit_large",
+      n_registers: 0,
+      n_registers_predictor: 0,
+      normalize_predictor: false,
+      pred_depth: 24,
+      pred_embed_dim: 384,
+      pred_is_causal: false,
+      pred_num_heads: 12,
+      uniform_power: true,
+      use_activation_checkpointing: true,
+      use_mask_tokens: true,
+      use_rope: true,
+      zero_init_mask_tokens: true,
+    },
+    optimization: {
+      ema: [0.99925, 0.99925],
+      epochs: 12,
+      final_lr: 0.000525,
+      final_weight_decay: 0.04,
+      ipe: 208,
+      ipe_scale: 1.0,
+      lr: 0.000525,
+      start_lr: 0.0001,
+      warmup: 1.0,
+      weight_decay: 0.04,
+    },
+  };
+}
+
+// Phase-specific defaults that override the base.
+const PHASE_DEFS = [
+  {
+    id: "pretrain",
+    title: "Phase 1 — Pretrain (warmup)",
+    filename: "pretrain-256px-16f.yaml",
+    folderName: "phase1_warmup",
+    overrides: (p) => {
+      p.meta.context_encoder_key = "ema_encoder";
+      p.meta.target_encoder_key = "ema_encoder";
+      p.meta.load_predictor = false;
+      p.meta.eval_freq = 12000;
+      p.meta.save_every_freq = 2000;
+      // For phase1, pretrain_checkpoint is the Meta checkpoint
+      p.meta.pretrain_checkpoint = "/path/to/checkpoints/pretrain_checkpoint.pt";
+      p.data.batch_size = 4;
+      p.data.crop_size = 256;
+      p.data.fps = 4;
+      p.optimization.epochs = 12;
+      p.optimization.ipe = 208;
+      p.optimization.warmup = 1.0;
+      p.optimization.start_lr = 0.0001;
+      p.optimization.final_lr = 0.000525;
+      p.optimization.lr = 0.000525;
+      p.loss.weight_distance_loss = true;
+    },
+  },
+  {
+    id: "video_segments",
+    title: "Phase 2 — Video segments (main)",
+    filename: "video-segments-256px-16f.yaml",
+    folderName: "phase2_main",
+    overrides: (p) => {
+      // Phase 2 drops the encoder keys; load_predictor=true; chain off phase1
+      p.meta.context_encoder_key = undefined;
+      p.meta.target_encoder_key = undefined;
+      p.meta.load_predictor = true;
+      p.meta.eval_freq = 60000;
+      p.meta.save_every_freq = 2500;
+      p.data.batch_size = 4;
+      p.data.crop_size = 384;  // baseline uses 384 here despite filename
+      p.data.fps = 4;
+      p.optimization.epochs = 250;
+      p.optimization.ipe = 500;
+      p.optimization.warmup = 0.0;
+      p.optimization.start_lr = 0.000525;
+      p.optimization.final_lr = 0.000525;
+      p.optimization.lr = 0.000525;
+      p.loss.weight_distance_loss = true;
+    },
+  },
+  {
+    id: "cooldown",
+    title: "Phase 3 — Cooldown",
+    filename: "cooldown-512px-16f.yaml",
+    folderName: "phase3_higher_res",
+    overrides: (p) => {
+      p.meta.context_encoder_key = undefined;
+      p.meta.target_encoder_key = undefined;
+      p.meta.load_predictor = true;
+      p.meta.eval_freq = 6000;
+      p.meta.save_every_freq = 1;
+      p.data.batch_size = 2;
+      p.data.crop_size = 512;
+      p.data.fps = 4;
+      p.optimization.epochs = 12;
+      p.optimization.ipe = 500;
+      p.optimization.warmup = 0.0;
+      p.optimization.start_lr = 0.000525;
+      p.optimization.final_lr = 0.000001;
+      p.optimization.lr = 0.000525;
+      p.loss.weight_distance_loss = false;
+    },
+  },
+];
+
+function makeExperiment(name) {
+  return {
+    name: name || "experiment_1",
+    phases: PHASE_DEFS.map((def, i) => {
+      const p = clonePhaseBase();
+      def.overrides(p);
+      p._open = i === 0;  // first phase open by default
+      return p;
+    }),
+  };
+}
+
+// =====================================================================
+// State
+// =====================================================================
+const state = {
+  experiments: [],
+  preview: { expIdx: 0, phaseIdx: 0, kind: "yaml" }, // kind: "yaml" | "sh"
+};
+
+// =====================================================================
+// YAML rendering helpers
+// =====================================================================
+
+// Single source of truth for "this phase is shared with an earlier one".
+// For each (experiment ei, phase pi) we compute a `chainKey` = the
+// concatenation of every phase config from pi=0 up to pi (sorted-key JSON,
+// so insertion order doesn't matter). Two phases with the same chainKey
+// are guaranteed to (a) have identical YAML content AND (b) descend from
+// the identical prior checkpoint — so they can safely point at the same
+// folder on disk. The FIRST experiment to introduce a chainKey becomes
+// that key's canonical owner; every later experiment that lands on the
+// same chainKey just reads the canonical experiment's folder.
+//
+// Used by buildPhaseYaml (folder + chain ckpt paths), buildLauncherSh
+// (skip already-run phases), and the ZIP writer (no duplicate YAMLs).
+// `phaseConfigKey` / `stableStringify` are function declarations defined
+// further down in the viz block — hoisted, so the call works.
+function computePhaseCanonicalMap() {
+  const result = state.experiments.map(() => []);
+  const chainKeyToCanon = new Map();
+  state.experiments.forEach((exp, ei) => {
+    let chainKey = "";
+    exp.phases.forEach((phase, pi) => {
+      chainKey += "|" + phaseConfigKey(phase);
+      if (!chainKeyToCanon.has(chainKey)) chainKeyToCanon.set(chainKey, ei);
+      const canonicalExpIdx = chainKeyToCanon.get(chainKey);
+      result[ei][pi] = { chainKey, canonicalExpIdx, isCanonical: canonicalExpIdx === ei };
+    });
+  });
+  return result;
+}
+
+function buildPhaseYaml(exp, phaseIdx, opts) {
+  const phase = exp.phases[phaseIdx];
+  const phaseDef = PHASE_DEFS[phaseIdx];
+
+  // Compute folder + pretrain_checkpoint relative to the CANONICAL experiment
+  // for this phase chain. If two experiments share phase 1 and phase 2, both
+  // YAMLs point at the same `folder` (so training writes once) and any
+  // downstream phase chains off that shared folder — never off a path that
+  // would not actually be populated.
+  const ei = state.experiments.indexOf(exp);
+  const canonMap = ei >= 0 ? computePhaseCanonicalMap() : null;
+  const canonicalName = canonMap
+    ? state.experiments[canonMap[ei][phaseIdx].canonicalExpIdx].name
+    : exp.name;
+  const prevCanonicalName = canonMap && phaseIdx > 0
+    ? state.experiments[canonMap[ei][phaseIdx - 1].canonicalExpIdx].name
+    : exp.name;
+
+  const expFolder = `${opts.checkpointRoot}/${canonicalName}/${phaseDef.folderName}`;
+  // chaining: phase1 keeps its meta override (Meta ckpt); phase2 reads from phase1 latest.pth.tar;
+  // phase3 reads from phase2 latest.pth.tar.
+  const enabled = phase.datasets.filter((d) => d.enabled);
+  const out = {
+    app: phase.app,
+    nodes: phase.nodes,
+    tasks_per_node: phase.tasks_per_node,
+    cpus_per_task: phase.cpus_per_task,
+    mem_per_gpu: phase.mem_per_gpu,
+    folder: expFolder,
+    data: {
+      num_clips: phase.data.num_clips,
+      dataset_type: phase.data.dataset_type,
+      datasets: enabled.map((d) => `${getCsvRoot()}/${d.csv}`),
+      datasets_weights: enabled.map((d) => d.weight),
+      batch_size: phase.data.batch_size,
+      crop_size: phase.data.crop_size,
+      patch_size: phase.data.patch_size,
+      dataset_fpcs: enabled.map((d) => d.fpcs),
+      tubelet_size: phase.data.tubelet_size,
+      fps: phase.data.fps,
+      num_workers: phase.data.num_workers,
+      persistent_workers: phase.data.persistent_workers,
+      pin_mem: phase.data.pin_mem,
+    },
+    data_aug: {
+      auto_augment: phase.data_aug.auto_augment,
+      motion_shift: phase.data_aug.motion_shift,
+      random_resize_aspect_ratio: phase.data_aug.random_resize_aspect_ratio,
+      random_resize_scale: phase.data_aug.random_resize_scale,
+      reprob: phase.data_aug.reprob,
+    },
+    loss: {
+      loss_exp: phase.loss.loss_exp,
+      predict_all: phase.loss.predict_all,
+      shift_by_n: phase.loss.shift_by_n,
+      weight_distance_loss: phase.loss.weight_distance_loss,
+    },
+    mask: phase.mask,
+    meta: {},
+    model: { ...phase.model },
+    optimization: { ...phase.optimization },
+  };
+
+  // Meta: chain checkpoints between phases. User override of pretrain_checkpoint
+  // is honored for phase1; phase2/3 always chain to previous phase's latest.
+  const meta = phase.meta;
+  if (phaseIdx === 0) {
+    if (meta.context_encoder_key !== undefined && meta.context_encoder_key !== null)
+      out.meta.context_encoder_key = meta.context_encoder_key;
+    out.meta.dtype = meta.dtype;
+    out.meta.eval_freq = meta.eval_freq;
+    out.meta.load_checkpoint = meta.load_checkpoint;
+    out.meta.load_predictor = meta.load_predictor;
+    out.meta.pretrain_checkpoint = meta.pretrain_checkpoint;
+    out.meta.read_checkpoint = meta.read_checkpoint;
+    out.meta.save_every_freq = meta.save_every_freq;
+    out.meta.seed = meta.seed;
+    if (meta.target_encoder_key !== undefined && meta.target_encoder_key !== null)
+      out.meta.target_encoder_key = meta.target_encoder_key;
+    out.meta.use_sdpa = meta.use_sdpa;
+  } else {
+    const prevDef = PHASE_DEFS[phaseIdx - 1];
+    // Always chain off the CANONICAL prior phase's folder, never off
+    // exp.name directly — otherwise an experiment that shares phase 1
+    // with another would read from a folder that nothing writes to.
+    const chainCkpt = `${opts.checkpointRoot}/${prevCanonicalName}/${prevDef.folderName}/latest.pth.tar`;
+    out.meta.dtype = meta.dtype;
+    out.meta.eval_freq = meta.eval_freq;
+    out.meta.load_checkpoint = meta.load_checkpoint;
+    out.meta.load_predictor = meta.load_predictor;
+    out.meta.pretrain_checkpoint = chainCkpt;
+    out.meta.read_checkpoint = meta.read_checkpoint;
+    out.meta.save_every_freq = meta.save_every_freq;
+    out.meta.seed = meta.seed;
+    out.meta.use_sdpa = meta.use_sdpa;
+  }
+
+  return out;
+}
+
+function renderYaml(obj) {
+  return jsyaml.dump(obj, {
+    noRefs: true,
+    lineWidth: 1000,
+    sortKeys: false,
+  });
+}
+
+function buildLauncherSh(opts) {
+  const configsSubdir = opts.configsSubdir.replace(/\/+$/, "");
+  const lines = [];
+  lines.push("#!/usr/bin/env bash");
+  lines.push("#");
+  lines.push(`# Auto-generated ablation launcher (cluster: ${opts.cluster}).`);
+  lines.push("# Edit PYTHON_BIN / VJEPA_NUM_GPUS below to retarget another machine.");
+  lines.push("");
+  lines.push("set -euo pipefail");
+  lines.push("");
+  lines.push('ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"');
+  lines.push("");
+  lines.push("# ---- Cluster settings ----");
+  lines.push(`CLUSTER="\${VJEPA_CLUSTER:-${opts.cluster}}"`);
+  lines.push(`PYTHON_BIN="\${VJEPA_PYTHON_BIN:-${opts.pythonBin}}"`);
+  lines.push(`NUM_GPUS="\${VJEPA_NUM_GPUS:-${opts.numGpus}}"`);
+  lines.push(`NUM_NODES="\${VJEPA_NUM_NODES:-${opts.numNodes}}"`);
+  lines.push('RUNTIME_CFG_TOOL="$ROOT/scripts/prepare_runtime_config.py"');
+  lines.push("");
+  lines.push("# If NUM_NODES > 1 we delegate to mpiexec + app.main_dist_polaris (Polaris");
+  lines.push("# multi-node launch pattern). Single-node keeps the original");
+  lines.push("# `python -m app.main --devices cuda:0..` path so it stays usable on");
+  lines.push("# any workstation/Sophia interactive session.");
+  lines.push("");
+  lines.push("COMMON_ENV=(");
+  lines.push("  OPENBLAS_NUM_THREADS=1");
+  lines.push("  OMP_NUM_THREADS=1");
+  lines.push("  MKL_NUM_THREADS=1");
+  lines.push("  NUMEXPR_NUM_THREADS=1");
+  lines.push(")");
+  lines.push("COMMON_ARGS=( -m app.main )");
+  lines.push("");
+  lines.push('if [[ ! -x "$PYTHON_BIN" ]]; then');
+  lines.push("  printf 'PYTHON_BIN not executable: %s\\n' \"$PYTHON_BIN\" >&2");
+  lines.push("  exit 2");
+  lines.push("fi");
+  lines.push("");
+  lines.push('case "$NUM_GPUS" in');
+  lines.push("  1|2|4|8) ;;");
+  lines.push("  *)");
+  lines.push("    printf 'VJEPA_NUM_GPUS must be one of 1, 2, 4, or 8 (got %s)\\n' \"$NUM_GPUS\" >&2");
+  lines.push("    exit 2");
+  lines.push("    ;;");
+  lines.push("esac");
+  lines.push("");
+  lines.push('if ! [[ "$NUM_NODES" =~ ^[0-9]+$ ]] || [[ "$NUM_NODES" -lt 1 ]]; then');
+  lines.push("  printf 'VJEPA_NUM_NODES must be a positive integer (got %s)\\n' \"$NUM_NODES\" >&2");
+  lines.push("  exit 2");
+  lines.push("fi");
+  lines.push("WORLD_SIZE=$(( NUM_NODES * NUM_GPUS ))");
+  lines.push("");
+  lines.push('if [[ -n "${VJEPA_DEVICES:-}" ]]; then');
+  lines.push('  read -r -a DEVICES <<< "$VJEPA_DEVICES"');
+  lines.push('  if [[ "${#DEVICES[@]}" -ne "$NUM_GPUS" ]]; then');
+  lines.push("    printf 'VJEPA_DEVICES count (%s) does not match VJEPA_NUM_GPUS (%s)\\n' \"${#DEVICES[@]}\" \"$NUM_GPUS\" >&2");
+  lines.push("    exit 2");
+  lines.push("  fi");
+  lines.push("else");
+  lines.push("  DEVICES=()");
+  lines.push("  for ((i = 0; i < NUM_GPUS; i += 1)); do");
+  lines.push('    DEVICES+=("cuda:${i}")');
+  lines.push("  done");
+  lines.push("fi");
+  lines.push("");
+  lines.push("phase_status() {");
+  lines.push('  local cfg="$1"');
+  lines.push('  env "${COMMON_ENV[@]}" "$PYTHON_BIN" - "$cfg" <<\'PY\'');
+  lines.push("import os, sys");
+  lines.push("import torch, yaml");
+  lines.push("cfg_path = sys.argv[1]");
+  lines.push('with open(cfg_path, "r") as handle:');
+  lines.push("    cfg = yaml.safe_load(handle)");
+  lines.push('folder = cfg["folder"]');
+  lines.push('num_epochs = int(cfg["optimization"]["epochs"])');
+  lines.push('app_name = cfg.get("app")');
+  lines.push("candidate_files = []");
+  lines.push('if app_name == "vjepa_2_1":');
+  lines.push('    candidate_files.extend(["latest.pth.tar", "latest.pt"])');
+  lines.push("else:");
+  lines.push('    candidate_files.extend(["latest.pt", "latest.pth.tar"])');
+  lines.push("latest_path = None");
+  lines.push("for candidate in candidate_files:");
+  lines.push("    candidate_path = os.path.join(folder, candidate)");
+  lines.push("    if os.path.exists(candidate_path):");
+  lines.push("        latest_path = candidate_path");
+  lines.push("        break");
+  lines.push("if latest_path is None:");
+  lines.push("    latest_path = os.path.join(folder, candidate_files[0])");
+  lines.push("if not os.path.exists(latest_path):");
+  lines.push('    print("fresh")');
+  lines.push("    raise SystemExit");
+  lines.push("try:");
+  lines.push('    checkpoint = torch.load(latest_path, map_location="cpu")');
+  lines.push('    saved_epoch = int(checkpoint.get("epoch", 0))');
+  lines.push("except Exception:");
+  lines.push('    print("resume")');
+  lines.push("    raise SystemExit");
+  lines.push("if saved_epoch >= num_epochs:");
+  lines.push('    print("complete")');
+  lines.push("else:");
+  lines.push('    print("resume")');
+  lines.push("PY");
+  lines.push("}");
+  lines.push("");
+  lines.push("run_phase() {");
+  lines.push('  local cfg="$1"');
+  lines.push("  local runtime_cfg");
+  lines.push("  local prep_args=( --root \"$ROOT\" --num-gpus \"$NUM_GPUS\" --num-nodes \"$NUM_NODES\" )");
+  lines.push('  if [[ "$NUM_NODES" -gt 1 ]]; then');
+  lines.push("    # Multi-node: preserve per-rank batch (global batch grows with total GPUs).");
+  lines.push("    prep_args+=( --strong-scale )");
+  lines.push("  fi");
+  lines.push("  runtime_cfg=\"$(env \"${COMMON_ENV[@]}\" \"$PYTHON_BIN\" \"$RUNTIME_CFG_TOOL\" \"${prep_args[@]}\" \"$cfg\")\"");
+  lines.push("  local status");
+  lines.push('  status="$(phase_status "$runtime_cfg")"');
+  lines.push('  case "$status" in');
+  lines.push("    complete)");
+  lines.push("      printf '\\n== Skipping completed phase %s [nodes=%s gpus/node=%s] ==\\n' \"$cfg\" \"$NUM_NODES\" \"$NUM_GPUS\"");
+  lines.push("      return 0");
+  lines.push("      ;;");
+  lines.push("    resume)");
+  lines.push("      printf '\\n== Resuming %s [nodes=%s gpus/node=%s] ==\\n' \"$cfg\" \"$NUM_NODES\" \"$NUM_GPUS\"");
+  lines.push("      ;;");
+  lines.push("    fresh)");
+  lines.push("      printf '\\n== Starting fresh %s [nodes=%s gpus/node=%s] ==\\n' \"$cfg\" \"$NUM_NODES\" \"$NUM_GPUS\"");
+  lines.push("      ;;");
+  lines.push("    *)");
+  lines.push("      printf '\\n== Unknown status for %s: %s ==\\n' \"$cfg\" \"$status\" >&2");
+  lines.push("      return 1");
+  lines.push("      ;;");
+  lines.push("  esac");
+  lines.push('  if [[ "$NUM_NODES" -gt 1 ]]; then');
+  lines.push("    # Multi-node Polaris launch. Requires running inside a PBS allocation with");
+  lines.push("    # PBS_NODEFILE set and the NCCL/libfabric env exported by the submitting");
+  lines.push("    # script (e.g. start_vjepa_ablation_*.sh).");
+  lines.push("    mpiexec -envall -n \"$WORLD_SIZE\" -ppn \"$NUM_GPUS\" \\");
+  lines.push("        --cpu-bind depth -d 16 \\");
+  lines.push("        -genv OMP_NUM_THREADS 8 \\");
+  lines.push("        \"$PYTHON_BIN\" -m app.main_dist_polaris --train_mode \\");
+  lines.push("            --fname \"$runtime_cfg\" \\");
+  lines.push("            --params_path \"$runtime_cfg\"");
+  lines.push("  else");
+  lines.push("    env \"${COMMON_ENV[@]}\" \"$PYTHON_BIN\" \"${COMMON_ARGS[@]}\" --devices \"${DEVICES[@]}\" --fname \"$runtime_cfg\"");
+  lines.push("  fi");
+  lines.push("}");
+  lines.push("");
+  lines.push('cd "$ROOT"');
+  lines.push("");
+  lines.push("printf '== Cluster: %s | python: %s | nodes: %s | gpus/node: %s | world: %s ==\\n' \"$CLUSTER\" \"$PYTHON_BIN\" \"$NUM_NODES\" \"$NUM_GPUS\" \"$WORLD_SIZE\"");
+  lines.push("");
+
+  // Phase-sharing: emit each unique (chainKey, phaseIdx) only once. The owner
+  // is the first experiment to introduce that chainKey (canonicalExpIdx).
+  // For non-canonical experiments we emit a comment showing which phases are
+  // reused so the launcher stays human-auditable.
+  const canonMap = computePhaseCanonicalMap();
+  const emittedChainKeys = new Set();
+
+  state.experiments.forEach((exp, ei) => {
+    lines.push(`# ---- ${exp.name} ----`);
+    lines.push(`printf '\\n== Running experiment %s ==\\n' "${exp.name}"`);
+    PHASE_DEFS.forEach((def, pi) => {
+      const entry = canonMap[ei][pi];
+      const canonicalExp = state.experiments[entry.canonicalExpIdx];
+      const yamlPath = `$ROOT/${configsSubdir}/${canonicalExp.name}/${def.filename}`;
+      if (emittedChainKeys.has(entry.chainKey)) {
+        // Already run by an earlier experiment in this launcher invocation —
+        // skip to avoid wasting wall-clock on identical training. The
+        // checkpoint produced by the canonical experiment is what every
+        // downstream phase of THIS experiment chains off (the YAML's
+        // pretrain_checkpoint already points at canonicalExp's folder).
+        lines.push(
+          `# phase ${pi + 1}: shared with ${canonicalExp.name} (already run above) → skipped`,
+        );
+      } else {
+        emittedChainKeys.add(entry.chainKey);
+        if (entry.canonicalExpIdx !== ei) {
+          // Shouldn't happen (canonical is always the first to appear), but
+          // guard against it for defense in depth.
+          lines.push(`# phase ${pi + 1}: canonical owner is ${canonicalExp.name}`);
+        }
+        lines.push(`run_phase "${yamlPath}"`);
+      }
+    });
+    lines.push("");
+  });
+  lines.push("printf '\\n== All experiments done ==\\n'");
+  return lines.join("\n");
+}
+
+// =====================================================================
+// UI rendering
+// =====================================================================
+const expContainer = document.getElementById("experiments");
+const expCountEl = document.getElementById("expCount");
+const previewTabs = document.getElementById("previewTabs");
+const previewBody = document.getElementById("previewBody");
+
+function el(tag, attrs = {}, children = []) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === "class") e.className = v;
+    else if (k === "html") e.innerHTML = v;
+    else if (k.startsWith("on") && typeof v === "function") e.addEventListener(k.slice(2), v);
+    else if (k === "checked") e.checked = !!v;
+    else if (k === "value") e.value = v;
+    else e.setAttribute(k, v);
+  }
+  for (const c of [].concat(children)) {
+    if (c == null) continue;
+    e.appendChild(typeof c === "string" ? document.createTextNode(c) : c);
+  }
+  return e;
+}
+
+function field(label, input) {
+  return el("div", { class: "field" }, [el("label", {}, label), input]);
+}
+function checkboxField(label, checked, onchange, fkey) {
+  const attrs = { type: "checkbox", checked, onchange };
+  if (fkey) attrs["data-fkey"] = fkey;
+  return el("div", { class: "field checkbox" }, [
+    el("input", attrs),
+    el("label", {}, label),
+  ]);
+}
+function numInput(value, step, onchange, fkey) {
+  const attrs = {
+    type: "number",
+    step: step || "any",
+    value: String(value),
+    oninput: (e) => onchange(parseValue(e.target.value)),
+  };
+  if (fkey) attrs["data-fkey"] = fkey;
+  return el("input", attrs);
+}
+function textInput(value, onchange, fkey) {
+  const attrs = {
+    type: "text",
+    value: value == null ? "" : String(value),
+    oninput: (e) => onchange(e.target.value),
+  };
+  if (fkey) attrs["data-fkey"] = fkey;
+  return el("input", attrs);
+}
+function nullableTextInput(value, onchange, fkey) {
+  const attrs = {
+    type: "text",
+    value: value == null ? "null" : String(value),
+    oninput: (e) => onchange(e.target.value === "null" || e.target.value === "" ? null : e.target.value),
+  };
+  if (fkey) attrs["data-fkey"] = fkey;
+  return el("input", attrs);
+}
+function arrayNumInput(value, onchange, fkey) {
+  const attrs = {
+    type: "text",
+    value: Array.isArray(value) ? value.join(", ") : "",
+    oninput: (e) => {
+      const parts = e.target.value
+        .split(",")
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0)
+        .map(parseValue);
+      onchange(parts);
+    },
+  };
+  if (fkey) attrs["data-fkey"] = fkey;
+  return el("input", attrs);
+}
+function parseValue(v) {
+  if (v === "" || v === null) return v;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : v;
+}
+
+function renderDatasetsSection(phase, refresh, base) {
+  const datasetsDiv = el("div", { class: "datasets" });
+  phase.datasets.forEach((d, di) => {
+    const row = el("div", { class: "dataset-row" + (d.enabled ? "" : " disabled") }, [
+      el("input", {
+        type: "checkbox",
+        checked: d.enabled,
+        onchange: (e) => {
+          d.enabled = e.target.checked;
+          refresh();
+        },
+        "data-fkey": `${base}.datasets.${di}.enabled`,
+      }),
+      el("div", { class: "csvname", title: `${getCsvRoot()}/${d.csv}` }, d.csv),
+      el("input", {
+        type: "number",
+        step: "0.01",
+        value: String(d.weight),
+        oninput: (e) => {
+          d.weight = parseValue(e.target.value);
+          refresh();
+        },
+        "data-fkey": `${base}.datasets.${di}.weight`,
+      }),
+      el("input", {
+        type: "number",
+        step: "1",
+        value: String(d.fpcs),
+        oninput: (e) => {
+          d.fpcs = parseValue(e.target.value);
+          refresh();
+        },
+        "data-fkey": `${base}.datasets.${di}.fpcs`,
+      }),
+    ]);
+    datasetsDiv.appendChild(row);
+  });
+
+  // Add a CSV name not in the default list
+  const newCsvInput = el("input", { type: "text", placeholder: "path_my_new_dataset.csv", "data-fkey": `${base}.datasets.add` });
+  const addCsvBtn = el(
+    "button",
+    {
+      onclick: () => {
+        const v = newCsvInput.value.trim();
+        if (!v) return;
+        if (phase.datasets.some((d) => d.csv === v)) return;
+        phase.datasets.push({ csv: v, enabled: true, weight: 1, fpcs: 16 });
+        refresh();
+      },
+    },
+    "+ Add CSV",
+  );
+  const addRow = el("div", { class: "add-csv-row" }, [newCsvInput, addCsvBtn]);
+
+  return el("div", { class: "section sec-datasets" }, [
+    el("h4", {}, "data.datasets"),
+    el("div", { class: "dataset-controls" }, [
+      el(
+        "button",
+        {
+          onclick: () => {
+            phase.datasets.forEach((d) => (d.enabled = true));
+            refresh();
+          },
+        },
+        "Select all",
+      ),
+      el(
+        "button",
+        {
+          onclick: () => {
+            phase.datasets.forEach((d) => (d.enabled = false));
+            refresh();
+          },
+        },
+        "Clear all",
+      ),
+    ]),
+    el(
+      "div",
+      { class: "dataset-row", style: "color: var(--muted); font-size: 11px; font-weight: 600;" },
+      [el("div", {}, ""), el("div", {}, "csv"), el("div", {}, "weight"), el("div", {}, "fpcs")],
+    ),
+    datasetsDiv,
+    addRow,
+    el("p", { class: "help" }, `Resolved path = ${getCsvRoot()}/<csv>. Only checked rows are emitted to YAML; arrays for datasets/weights/fpcs stay aligned automatically.`),
+  ]);
+}
+
+function renderDataSection(phase, refresh, base) {
+  const d = phase.data;
+  const k = (n) => `${base}.data.${n}`;
+  return el("div", { class: "section sec-data" }, [
+    el("h4", {}, "data"),
+    el("div", { class: "grid cols3" }, [
+      field("num_clips", numInput(d.num_clips, "1", (v) => { d.num_clips = v; refresh(); }, k("num_clips"))),
+      field("dataset_type", textInput(d.dataset_type, (v) => { d.dataset_type = v; refresh(); }, k("dataset_type"))),
+      field("batch_size", numInput(d.batch_size, "1", (v) => { d.batch_size = v; refresh(); }, k("batch_size"))),
+      field("crop_size", numInput(d.crop_size, "1", (v) => { d.crop_size = v; refresh(); }, k("crop_size"))),
+      field("patch_size", numInput(d.patch_size, "1", (v) => { d.patch_size = v; refresh(); }, k("patch_size"))),
+      field("tubelet_size", numInput(d.tubelet_size, "1", (v) => { d.tubelet_size = v; refresh(); }, k("tubelet_size"))),
+      field("fps", numInput(d.fps, "1", (v) => { d.fps = v; refresh(); }, k("fps"))),
+      field("num_workers", numInput(d.num_workers, "1", (v) => { d.num_workers = v; refresh(); }, k("num_workers"))),
+      checkboxField("persistent_workers", d.persistent_workers, (e) => { d.persistent_workers = e.target.checked; refresh(); }, k("persistent_workers")),
+      checkboxField("pin_mem", d.pin_mem, (e) => { d.pin_mem = e.target.checked; refresh(); }, k("pin_mem")),
+    ]),
+  ]);
+}
+
+function renderDataAugSection(phase, refresh, base) {
+  const da = phase.data_aug;
+  const k = (n) => `${base}.data_aug.${n}`;
+  return el("div", { class: "section sec-data-aug" }, [
+    el("h4", {}, "data_aug"),
+    el("div", { class: "grid" }, [
+      checkboxField("auto_augment", da.auto_augment, (e) => { da.auto_augment = e.target.checked; refresh(); }, k("auto_augment")),
+      checkboxField("motion_shift", da.motion_shift, (e) => { da.motion_shift = e.target.checked; refresh(); }, k("motion_shift")),
+      field("random_resize_aspect_ratio (csv)", arrayNumInput(da.random_resize_aspect_ratio, (v) => { da.random_resize_aspect_ratio = v; refresh(); }, k("random_resize_aspect_ratio"))),
+      field("random_resize_scale (csv)", arrayNumInput(da.random_resize_scale, (v) => { da.random_resize_scale = v; refresh(); }, k("random_resize_scale"))),
+      field("reprob", numInput(da.reprob, "0.01", (v) => { da.reprob = v; refresh(); }, k("reprob"))),
+    ]),
+  ]);
+}
+
+function renderLossSection(phase, refresh, base) {
+  const l = phase.loss;
+  const k = (n) => `${base}.loss.${n}`;
+  return el("div", { class: "section sec-loss" }, [
+    el("h4", {}, "loss"),
+    el("div", { class: "grid" }, [
+      field("loss_exp", numInput(l.loss_exp, "0.1", (v) => { l.loss_exp = v; refresh(); }, k("loss_exp"))),
+      checkboxField("predict_all", l.predict_all, (e) => { l.predict_all = e.target.checked; refresh(); }, k("predict_all")),
+      field("shift_by_n", numInput(l.shift_by_n, "1", (v) => { l.shift_by_n = v; refresh(); }, k("shift_by_n"))),
+      checkboxField("weight_distance_loss", l.weight_distance_loss, (e) => { l.weight_distance_loss = e.target.checked; refresh(); }, k("weight_distance_loss")),
+    ]),
+  ]);
+}
+
+function renderMaskSection(phase, refresh, base) {
+  const blocks = el("div", {});
+  phase.mask.forEach((mb, mi) => {
+    const k = (n) => `${base}.mask.${mi}.${n}`;
+    const head = el("div", { class: "mask-head" }, [
+      el("div", { class: "ml" }, `block ${mi}`),
+      el(
+        "button",
+        {
+          class: "warn",
+          onclick: () => {
+            phase.mask.splice(mi, 1);
+            refresh();
+          },
+        },
+        "Remove",
+      ),
+    ]);
+    const body = el("div", { class: "grid cols3" }, [
+      field("aspect_ratio (csv)", arrayNumInput(mb.aspect_ratio, (v) => { mb.aspect_ratio = v; refresh(); }, k("aspect_ratio"))),
+      checkboxField("full_complement", mb.full_complement, (e) => { mb.full_complement = e.target.checked; refresh(); }, k("full_complement")),
+      field("max_keep (null or int)", nullableTextInput(mb.max_keep, (v) => { mb.max_keep = v == null ? null : parseValue(v); refresh(); }, k("max_keep"))),
+      field("max_temporal_keep", numInput(mb.max_temporal_keep, "0.05", (v) => { mb.max_temporal_keep = v; refresh(); }, k("max_temporal_keep"))),
+      field("num_blocks", numInput(mb.num_blocks, "1", (v) => { mb.num_blocks = v; refresh(); }, k("num_blocks"))),
+      field("spatial_scale (csv)", arrayNumInput(mb.spatial_scale, (v) => { mb.spatial_scale = v; refresh(); }, k("spatial_scale"))),
+      field("temporal_scale (csv)", arrayNumInput(mb.temporal_scale, (v) => { mb.temporal_scale = v; refresh(); }, k("temporal_scale"))),
+    ]);
+    blocks.appendChild(el("div", { class: "mask-block" }, [head, body]));
+  });
+  const addBtn = el(
+    "button",
+    {
+      onclick: () => {
+        phase.mask.push(JSON.parse(JSON.stringify(MASK_DEFAULT[0])));
+        refresh();
+      },
+    },
+    "+ Add mask block",
+  );
+  return el("div", { class: "section sec-mask" }, [el("h4", {}, "mask"), blocks, addBtn]);
+}
+
+function renderMetaSection(phase, refresh, phaseIdx, base) {
+  const m = phase.meta;
+  const k = (n) => `${base}.meta.${n}`;
+  const fields = [
+    field("dtype", textInput(m.dtype, (v) => { m.dtype = v; refresh(); }, k("dtype"))),
+    field("eval_freq", numInput(m.eval_freq, "1", (v) => { m.eval_freq = v; refresh(); }, k("eval_freq"))),
+    checkboxField("load_checkpoint", m.load_checkpoint, (e) => { m.load_checkpoint = e.target.checked; refresh(); }, k("load_checkpoint")),
+    checkboxField("load_predictor", m.load_predictor, (e) => { m.load_predictor = e.target.checked; refresh(); }, k("load_predictor")),
+    field("save_every_freq", numInput(m.save_every_freq, "1", (v) => { m.save_every_freq = v; refresh(); }, k("save_every_freq"))),
+    field("seed", numInput(m.seed, "1", (v) => { m.seed = v; refresh(); }, k("seed"))),
+    field("read_checkpoint (null or path)", nullableTextInput(m.read_checkpoint, (v) => { m.read_checkpoint = v; refresh(); }, k("read_checkpoint"))),
+    checkboxField("use_sdpa", m.use_sdpa, (e) => { m.use_sdpa = e.target.checked; refresh(); }, k("use_sdpa")),
+  ];
+  if (phaseIdx === 0) {
+    fields.unshift(
+      field("pretrain_checkpoint (Meta init)",
+        textInput(m.pretrain_checkpoint, (v) => { m.pretrain_checkpoint = v; refresh(); }, k("pretrain_checkpoint"))),
+      field("context_encoder_key", textInput(m.context_encoder_key || "", (v) => { m.context_encoder_key = v || null; refresh(); }, k("context_encoder_key"))),
+      field("target_encoder_key", textInput(m.target_encoder_key || "", (v) => { m.target_encoder_key = v || null; refresh(); }, k("target_encoder_key"))),
+    );
+  } else {
+    fields.unshift(
+      el("div", { class: "field" }, [
+        el("label", {}, "pretrain_checkpoint"),
+        el("input", {
+          type: "text",
+          value: `chained from phase ${phaseIdx} (latest.pth.tar)`,
+          disabled: "true",
+        }),
+      ]),
+    );
+  }
+  return el("div", { class: "section sec-meta" }, [el("h4", {}, "meta"), el("div", { class: "grid" }, fields)]);
+}
+
+function renderModelSection(phase, refresh, base) {
+  const m = phase.model;
+  const entries = Object.entries(m);
+  const fk = (n) => `${base}.model.${n}`;
+  return el("div", { class: "section sec-model" }, [
+    el("h4", {}, "model"),
+    el("div", { class: "grid cols3" }, entries.map(([key, v]) => {
+      if (typeof v === "boolean") {
+        return checkboxField(key, v, (e) => { m[key] = e.target.checked; refresh(); }, fk(key));
+      }
+      if (typeof v === "number") {
+        return field(key, numInput(v, "any", (nv) => { m[key] = nv; refresh(); }, fk(key)));
+      }
+      return field(key, textInput(v, (nv) => { m[key] = nv; refresh(); }, fk(key)));
+    })),
+  ]);
+}
+
+function renderOptimizationSection(phase, refresh, base) {
+  const o = phase.optimization;
+  const k = (n) => `${base}.optimization.${n}`;
+  return el("div", { class: "section sec-optimization" }, [
+    el("h4", {}, "optimization"),
+    el("div", { class: "grid cols3" }, [
+      field("ema (csv, len 2)", arrayNumInput(o.ema, (v) => { o.ema = v; refresh(); }, k("ema"))),
+      field("epochs", numInput(o.epochs, "1", (v) => { o.epochs = v; refresh(); }, k("epochs"))),
+      field("final_lr", numInput(o.final_lr, "any", (v) => { o.final_lr = v; refresh(); }, k("final_lr"))),
+      field("final_weight_decay", numInput(o.final_weight_decay, "any", (v) => { o.final_weight_decay = v; refresh(); }, k("final_weight_decay"))),
+      field("ipe", numInput(o.ipe, "1", (v) => { o.ipe = v; refresh(); }, k("ipe"))),
+      field("ipe_scale", numInput(o.ipe_scale, "any", (v) => { o.ipe_scale = v; refresh(); }, k("ipe_scale"))),
+      field("lr", numInput(o.lr, "any", (v) => { o.lr = v; refresh(); }, k("lr"))),
+      field("start_lr", numInput(o.start_lr, "any", (v) => { o.start_lr = v; refresh(); }, k("start_lr"))),
+      field("warmup", numInput(o.warmup, "any", (v) => { o.warmup = v; refresh(); }, k("warmup"))),
+      field("weight_decay", numInput(o.weight_decay, "any", (v) => { o.weight_decay = v; refresh(); }, k("weight_decay"))),
+    ]),
+  ]);
+}
+
+function renderTopSection(phase, refresh, base) {
+  const k = (n) => `${base}.top.${n}`;
+  return el("div", { class: "section sec-toplevel" }, [
+    el("h4", {}, "top-level"),
+    el("div", { class: "grid cols3" }, [
+      field("app", textInput(phase.app, (v) => { phase.app = v; refresh(); }, k("app"))),
+      field("nodes", numInput(phase.nodes, "1", (v) => { phase.nodes = v; refresh(); }, k("nodes"))),
+      field("tasks_per_node", numInput(phase.tasks_per_node, "1", (v) => { phase.tasks_per_node = v; refresh(); }, k("tasks_per_node"))),
+      field("cpus_per_task", numInput(phase.cpus_per_task, "1", (v) => { phase.cpus_per_task = v; refresh(); }, k("cpus_per_task"))),
+      field("mem_per_gpu", textInput(phase.mem_per_gpu, (v) => { phase.mem_per_gpu = v; refresh(); }, k("mem_per_gpu"))),
+    ]),
+    el("p", { class: "help" }, `folder is auto-set per experiment to <checkpoint root>/${'<exp_name>'}/<phaseN_*>.`),
+  ]);
+}
+
+function renderPhase(exp, expIdx, phaseIdx, refresh) {
+  const phase = exp.phases[phaseIdx];
+  const def = PHASE_DEFS[phaseIdx];
+  if (typeof phase._open !== "boolean") phase._open = phaseIdx === 0;
+  const base = `e${expIdx}.p${phaseIdx}`;
+  const header = el("div", { class: "phase-head", onclick: () => {
+    phase._open = !phase._open;
+    refresh();
+  } }, [
+    el("span", { class: "chev" }, "▸"),
+    el("span", { class: "pname" }, def.title),
+    el("span", { class: "pdesc" }, `→ ${def.filename}`),
+  ]);
+  const body = el("div", { class: "phase-body" }, [
+    renderTopSection(phase, refresh, base),
+    renderDatasetsSection(phase, refresh, base),
+    renderDataSection(phase, refresh, base),
+    renderDataAugSection(phase, refresh, base),
+    renderLossSection(phase, refresh, base),
+    renderMaskSection(phase, refresh, base),
+    renderMetaSection(phase, refresh, phaseIdx, base),
+    renderModelSection(phase, refresh, base),
+    renderOptimizationSection(phase, refresh, base),
+  ]);
+  return el("div", { class: phase._open ? "phase open" : "phase", "data-phase": String(phaseIdx) }, [header, body]);
+}
+
+function renderExperiment(exp, expIdx) {
+  const refresh = () => { renderAll(); };
+  const phasesDiv = el("div", { class: "phases" });
+  exp.phases.forEach((_, pi) => phasesDiv.appendChild(renderPhase(exp, expIdx, pi, refresh)));
+
+  return el("div", { class: "experiment" }, [
+    el("div", { class: "exp-head" }, [
+      el("div", { class: "idx" }, `#${expIdx + 1}`),
+      el("input", {
+        class: "exp-name",
+        type: "text",
+        value: exp.name,
+        oninput: (e) => {
+          exp.name = e.target.value.trim().replace(/\s+/g, "_") || `experiment_${expIdx + 1}`;
+          renderAll();
+        },
+        "data-fkey": `e${expIdx}.name`,
+      }),
+      el("div", { class: "exp-actions" }, [
+        el(
+          "button",
+          {
+            onclick: () => {
+              const copy = JSON.parse(JSON.stringify(exp));
+              copy.name = nextDuplicateName(exp.name);
+              state.experiments.splice(expIdx + 1, 0, copy);
+              renderAll();
+            },
+          },
+          "Duplicate",
+        ),
+        el(
+          "button",
+          {
+            onclick: () => {
+              if (expIdx > 0) {
+                const [item] = state.experiments.splice(expIdx, 1);
+                state.experiments.splice(expIdx - 1, 0, item);
+                renderAll();
+              }
+            },
+          },
+          "↑",
+        ),
+        el(
+          "button",
+          {
+            onclick: () => {
+              if (expIdx < state.experiments.length - 1) {
+                const [item] = state.experiments.splice(expIdx, 1);
+                state.experiments.splice(expIdx + 1, 0, item);
+                renderAll();
+              }
+            },
+          },
+          "↓",
+        ),
+        el(
+          "button",
+          {
+            class: "warn",
+            onclick: () => {
+              state.experiments.splice(expIdx, 1);
+              if (state.preview.expIdx >= state.experiments.length) state.preview.expIdx = 0;
+              renderAll();
+            },
+          },
+          "Delete",
+        ),
+      ]),
+    ]),
+    phasesDiv,
+  ]);
+}
+
+const CLUSTER_DEFAULTS = {
+  sophia: {
+    pythonBin: "/path/to/venvs/vjepa/bin/python",
+    numGpus: 8,
+    label: "sophia",
+  },
+  polaris: {
+    pythonBin: "/path/to/venvs/vjepa_polaris/bin/python",
+    numGpus: 4,
+    label: "polaris",
+  },
+};
+
+function getClusterPythonBin(cluster) {
+  if (cluster === "sophia") {
+    const v = (document.getElementById("sophiaPythonBin") || {}).value;
+    return (v && v.trim()) || CLUSTER_DEFAULTS.sophia.pythonBin;
+  }
+  if (cluster === "polaris") {
+    const v = (document.getElementById("polarisPythonBin") || {}).value;
+    return (v && v.trim()) || CLUSTER_DEFAULTS.polaris.pythonBin;
+  }
+  return CLUSTER_DEFAULTS.sophia.pythonBin;
+}
+
+function getOpts() {
+  const cluster = document.getElementById("cluster").value;
+  const def = CLUSTER_DEFAULTS[cluster] || CLUSTER_DEFAULTS.sophia;
+  const overrideRaw = document.getElementById("numGpusOverride").value.trim();
+  const override = overrideRaw === "" ? null : Number(overrideRaw);
+  const numGpus = Number.isFinite(override) && override > 0 ? override : def.numGpus;
+  const nodesRaw = document.getElementById("numNodes").value.trim();
+  const nodesParsed = nodesRaw === "" ? 1 : Number(nodesRaw);
+  const numNodes = Number.isFinite(nodesParsed) && nodesParsed >= 1 ? Math.floor(nodesParsed) : 1;
+  return {
+    projectRoot: document.getElementById("projectRoot").value.trim().replace(/\/+$/, ""),
+    checkpointRoot: document.getElementById("checkpointRoot").value.trim().replace(/\/+$/, ""),
+    configsSubdir: document.getElementById("configsSubdir").value.trim().replace(/^\/+|\/+$/g, ""),
+    launcherName: document.getElementById("launcherName").value.trim() || "run_ablation_batch.sh",
+    cluster: def.label,
+    pythonBin: getClusterPythonBin(def.label),
+    sophiaPythonBin: getClusterPythonBin("sophia"),
+    polarisPythonBin: getClusterPythonBin("polaris"),
+    csvRoot: getCsvRoot(),
+    numGpus,
+    numNodes,
+  };
+}
+
+function renderPreviewTabs() {
+  previewTabs.innerHTML = "";
+  const tab = (label, kind, expIdx, phaseIdx) =>
+    el(
+      "button",
+      {
+        class: state.preview.kind === kind && state.preview.expIdx === expIdx && state.preview.phaseIdx === phaseIdx ? "active" : "",
+        onclick: () => {
+          state.preview.kind = kind;
+          state.preview.expIdx = expIdx;
+          state.preview.phaseIdx = phaseIdx;
+          renderPreview();
+          renderPreviewTabs();
+        },
+      },
+      label,
+    );
+
+  if (state.experiments.length === 0) {
+    previewTabs.appendChild(el("span", { style: "color: var(--muted); font-size: 12px;" }, "No experiments yet"));
+    return;
+  }
+
+  state.experiments.forEach((exp, ei) => {
+    previewTabs.appendChild(
+      el("span", { style: "color: var(--muted); font-size: 11px; align-self: center; margin-right: 4px;" }, `${exp.name}:`),
+    );
+    PHASE_DEFS.forEach((def, pi) => {
+      previewTabs.appendChild(tab(`p${pi + 1}`, "yaml", ei, pi));
+    });
+    previewTabs.appendChild(el("span", { style: "color: var(--border); align-self: center; margin: 0 4px;" }, "|"));
+  });
+  previewTabs.appendChild(tab("launcher.sh", "sh", -1, -1));
+}
+
+function renderPreview() {
+  try {
+    if (state.preview.kind === "sh") {
+      previewBody.textContent = buildLauncherSh(getOpts());
+    } else if (state.experiments.length > 0) {
+      const exp = state.experiments[state.preview.expIdx];
+      if (!exp) {
+        previewBody.textContent = "(no experiment)";
+        return;
+      }
+      const obj = buildPhaseYaml(exp, state.preview.phaseIdx, getOpts());
+      previewBody.textContent = renderYaml(obj);
+    } else {
+      previewBody.textContent = "Add an experiment to see the generated YAML.";
+    }
+  } catch (e) {
+    previewBody.textContent = `Error: ${e.message}\n${e.stack || ""}`;
+  }
+}
+
+function captureFocus() {
+  const a = document.activeElement;
+  if (!a || a === document.body) return null;
+  const key = a.getAttribute("data-fkey");
+  if (!key) return null;
+  return {
+    key,
+    selectionStart: a.selectionStart,
+    selectionEnd: a.selectionEnd,
+    scrollTop: document.querySelector(".builder")?.scrollTop ?? 0,
+  };
+}
+function restoreFocus(snap) {
+  if (!snap) return;
+  const target = document.querySelector(`[data-fkey="${CSS.escape(snap.key)}"]`);
+  if (target) {
+    target.focus();
+    if (snap.selectionStart != null && typeof target.setSelectionRange === "function") {
+      try { target.setSelectionRange(snap.selectionStart, snap.selectionEnd); } catch (_) {}
+    }
+  }
+  const builder = document.querySelector(".builder");
+  if (builder) builder.scrollTop = snap.scrollTop;
+}
+
+function renderAll() {
+  const snap = captureFocus();
+  expContainer.innerHTML = "";
+  state.experiments.forEach((exp, ei) => expContainer.appendChild(renderExperiment(exp, ei)));
+  expCountEl.textContent = `${state.experiments.length} experiment${state.experiments.length === 1 ? "" : "s"}`;
+  renderPreviewTabs();
+  renderPreview();
+  refreshBatchOpsSelects();
+  restoreFocus(snap);
+}
+
+// =====================================================================
+// Batch operations: propagate dataset composition and sweep value
+// =====================================================================
+function allKnownCsvs() {
+  const seen = new Set(KNOWN_CSVS);
+  for (const exp of state.experiments) {
+    for (const phase of exp.phases) {
+      for (const d of phase.datasets) seen.add(d.csv);
+    }
+  }
+  return Array.from(seen);
+}
+
+function setSelectOptions(sel, options, preferValue) {
+  const prev = preferValue != null ? preferValue : sel.value;
+  sel.innerHTML = "";
+  for (const opt of options) {
+    const o = document.createElement("option");
+    o.value = opt.value;
+    o.textContent = opt.label;
+    sel.appendChild(o);
+  }
+  if (options.some((o) => o.value === prev)) sel.value = prev;
+}
+
+const sweepCsvSelection = new Set();
+
+function refreshBatchOpsSelects() {
+  const propFromExp = document.getElementById("propFromExp");
+  const sweepCsv = document.getElementById("sweepCsv");
+  if (!propFromExp || !sweepCsv) return;
+
+  const expOpts = state.experiments.map((e, i) => ({ value: String(i), label: `#${i + 1} ${e.name}` }));
+  if (expOpts.length === 0) expOpts.push({ value: "0", label: "(no experiments)" });
+  setSelectOptions(propFromExp, expOpts);
+
+  const csvs = allKnownCsvs().sort();
+  // Drop selections that no longer exist
+  for (const c of Array.from(sweepCsvSelection)) {
+    if (!csvs.includes(c)) sweepCsvSelection.delete(c);
+  }
+  const filter = (document.getElementById("sweepCsvFilter")?.value || "").trim().toLowerCase();
+  sweepCsv.innerHTML = "";
+  for (const csv of csvs) {
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.value = csv;
+    cb.checked = sweepCsvSelection.has(csv);
+    cb.addEventListener("change", () => {
+      if (cb.checked) sweepCsvSelection.add(csv);
+      else sweepCsvSelection.delete(csv);
+      updateSweepCsvCount();
+    });
+    const label = document.createElement("label");
+    if (filter && !csv.toLowerCase().includes(filter)) label.classList.add("hidden");
+    label.appendChild(cb);
+    label.appendChild(document.createTextNode(csv));
+    sweepCsv.appendChild(label);
+  }
+  updateSweepCsvCount();
+  updateBatchOpsPreviews();
+}
+
+function updateSweepCsvCount() {
+  const el = document.getElementById("sweepCsvCount");
+  if (el) el.textContent = `(${sweepCsvSelection.size} selected)`;
+}
+
+function ensureCsvInPhase(phase, csv) {
+  let row = phase.datasets.find((d) => d.csv === csv);
+  if (!row) {
+    row = { csv, enabled: false, weight: 0, fpcs: 16 };
+    phase.datasets.push(row);
+  }
+  return row;
+}
+
+function applyPropagate() {
+  if (state.experiments.length < 2) {
+    alert("Need at least 2 experiments to propagate.");
+    return;
+  }
+  const fromExp = parseInt(document.getElementById("propFromExp").value, 10) || 0;
+  const fromPhaseRaw = document.getElementById("propFromPhase").value;
+  const scope = document.getElementById("propToScope").value;
+  const src = state.experiments[fromExp];
+  if (!src) return;
+
+  const targetIdxs = state.experiments
+    .map((_, i) => i)
+    .filter((i) => i !== fromExp)
+    .filter((i) => scope === "after" ? i > fromExp : scope === "before" ? i < fromExp : true);
+
+  if (targetIdxs.length === 0) {
+    alert("No target experiments match the selected scope.");
+    return;
+  }
+
+  for (const ti of targetIdxs) {
+    const dst = state.experiments[ti];
+    if (fromPhaseRaw === "all") {
+      for (let pi = 0; pi < PHASE_DEFS.length; pi++) {
+        dst.phases[pi].datasets = JSON.parse(JSON.stringify(src.phases[pi].datasets));
+      }
+    } else {
+      const pi = parseInt(fromPhaseRaw, 10) || 0;
+      const copy = JSON.parse(JSON.stringify(src.phases[pi].datasets));
+      for (let p = 0; p < PHASE_DEFS.length; p++) {
+        dst.phases[p].datasets = JSON.parse(JSON.stringify(copy));
+      }
+    }
+  }
+  renderAll();
+}
+
+function applySweep() {
+  if (state.experiments.length === 0) {
+    alert("Add at least one experiment first.");
+    return;
+  }
+  const csvs = Array.from(sweepCsvSelection);
+  const fieldName = document.getElementById("sweepField").value;
+  const phaseSel = document.getElementById("sweepPhase").value;
+  const start = Number(document.getElementById("sweepStart").value);
+  const step = Number(document.getElementById("sweepStep").value);
+  const scope = document.getElementById("sweepScope").value;
+  if (csvs.length === 0) { alert("Pick at least one CSV."); return; }
+  if (!Number.isFinite(start) || !Number.isFinite(step)) {
+    alert("Start and step must be numbers.");
+    return;
+  }
+  const startIdx = scope === "from1" ? 1 : 0;
+  const phaseIdxs = phaseSel === "all" ? [0, 1, 2] : [parseInt(phaseSel, 10)];
+
+  state.experiments.forEach((exp, ei) => {
+    if (ei < startIdx) return;
+    const sweepIdx = ei - startIdx;
+    const raw = start + sweepIdx * step;
+    for (const pi of phaseIdxs) {
+      const phase = exp.phases[pi];
+      for (const csv of csvs) {
+        const row = ensureCsvInPhase(phase, csv);
+        if (fieldName === "weight") {
+          const val = Math.max(0, raw);
+          row.weight = Number(val.toFixed(6));
+          row.enabled = val > 0;
+        } else {
+          const val = Math.max(0, Math.round(raw));
+          row.fpcs = val;
+        }
+      }
+    }
+  });
+  renderAll();
+}
+
+function updateBatchOpsPreviews() {
+  const propPreview = document.getElementById("propPreview");
+  const sweepPreview = document.getElementById("sweepPreview");
+  if (propPreview) {
+    const n = state.experiments.length;
+    propPreview.textContent = n < 2 ? "(need ≥2 experiments)" : `will update ${n - 1} experiment(s)`;
+  }
+  if (sweepPreview) {
+    const start = Number(document.getElementById("sweepStart")?.value);
+    const step = Number(document.getElementById("sweepStep")?.value);
+    const scope = document.getElementById("sweepScope")?.value || "all";
+    const startIdx = scope === "from1" ? 1 : 0;
+    if (Number.isFinite(start) && Number.isFinite(step) && state.experiments.length > 0) {
+      const vals = state.experiments.map((_, ei) => {
+        if (ei < startIdx) return "—";
+        const v = start + (ei - startIdx) * step;
+        return (Math.round(v * 1000) / 1000).toString();
+      });
+      sweepPreview.textContent = `values: [${vals.join(", ")}]`;
+    } else {
+      sweepPreview.textContent = "";
+    }
+  }
+}
+
+// =====================================================================
+// Toolbar actions
+// =====================================================================
+function existingExperimentNames() {
+  return new Set(state.experiments.map((e) => e.name));
+}
+
+function nextExperimentName() {
+  const used = existingExperimentNames();
+  let i = state.experiments.length + 1;
+  while (used.has(`experiment_${i}`)) i += 1;
+  return `experiment_${i}`;
+}
+
+function nextDuplicateName(baseName) {
+  // If the name ends in `_NN` or `NN`, find the next free numeric suffix on
+  // that stem (so `experiment_1` → `experiment_2`, `phase3_v2` → `phase3_v3`).
+  // Otherwise append `_2`, `_3`, ... avoiding existing names.
+  const used = existingExperimentNames();
+  const mUnder = baseName.match(/^(.*?)_(\d+)$/);
+  const mNoUnder = baseName.match(/^(.*?)(\d+)$/);
+  let stem;
+  let sep;
+  let start;
+  if (mUnder) {
+    stem = mUnder[1];
+    sep = "_";
+    start = parseInt(mUnder[2], 10) + 1;
+  } else if (mNoUnder && mNoUnder[1].length > 0) {
+    stem = mNoUnder[1];
+    sep = "";
+    start = parseInt(mNoUnder[2], 10) + 1;
+  } else {
+    stem = baseName;
+    sep = "_";
+    start = 2;
+  }
+  let i = start;
+  while (used.has(`${stem}${sep}${i}`)) i += 1;
+  return `${stem}${sep}${i}`;
+}
+
+function addExperiment() {
+  const name = nextExperimentName();
+  state.experiments.push(makeExperiment(name));
+  state.preview.expIdx = state.experiments.length - 1;
+  state.preview.phaseIdx = 0;
+  state.preview.kind = "yaml";
+  renderAll();
+}
+
+document.getElementById("addExp").addEventListener("click", addExperiment);
+document.getElementById("addExp2").addEventListener("click", addExperiment);
+document.getElementById("duplicateLast").addEventListener("click", () => {
+  if (state.experiments.length === 0) return addExperiment();
+  const last = state.experiments[state.experiments.length - 1];
+  const copy = JSON.parse(JSON.stringify(last));
+  copy.name = nextDuplicateName(last.name);
+  state.experiments.push(copy);
+  renderAll();
+});
+
+["projectRoot", "checkpointRoot", "configsSubdir", "launcherName", "numGpusOverride", "numNodes", "sophiaPythonBin", "polarisPythonBin"].forEach((id) => {
+  document.getElementById(id).addEventListener("input", () => {
+    renderPreview();
+  });
+});
+document.getElementById("csvRoot").addEventListener("input", () => {
+  // CSV root is also displayed inside dataset rows (tooltip + help text), so a
+  // full re-render is needed — not just the preview.
+  renderAll();
+});
+document.getElementById("cluster").addEventListener("change", () => {
+  renderPreview();
+});
+
+document.getElementById("propApply").addEventListener("click", applyPropagate);
+document.getElementById("sweepApply").addEventListener("click", applySweep);
+["sweepStart", "sweepStep", "sweepScope"].forEach((id) => {
+  document.getElementById(id).addEventListener("input", updateBatchOpsPreviews);
+});
+document.getElementById("sweepCsvAll").addEventListener("click", () => {
+  for (const csv of allKnownCsvs()) sweepCsvSelection.add(csv);
+  refreshBatchOpsSelects();
+});
+document.getElementById("sweepCsvNone").addEventListener("click", () => {
+  sweepCsvSelection.clear();
+  refreshBatchOpsSelects();
+});
+document.getElementById("sweepCsvFilter").addEventListener("input", () => {
+  // Filter-only refresh: toggle .hidden on existing labels rather than rebuild
+  const filter = document.getElementById("sweepCsvFilter").value.trim().toLowerCase();
+  const picker = document.getElementById("sweepCsv");
+  for (const label of picker.querySelectorAll("label")) {
+    const csv = label.textContent.trim();
+    label.classList.toggle("hidden", !!(filter && !csv.toLowerCase().includes(filter)));
+  }
+});
+
+document.getElementById("downloadZip").addEventListener("click", async () => {
+  if (state.experiments.length === 0) {
+    alert("Add at least one experiment first.");
+    return;
+  }
+  const opts = getOpts();
+  const zip = new JSZip();
+  const configsSubdir = opts.configsSubdir.replace(/^\/+|\/+$/g, "");
+  // Mirror the launcher's dedup: only the canonical experiment for each
+  // (chainKey, phaseIdx) writes a YAML to disk. Non-canonical experiments
+  // never need their own copy because the launcher invokes the canonical
+  // path, and any downstream phase of theirs already chains off the
+  // canonical folder via buildPhaseYaml.
+  const canonMap = computePhaseCanonicalMap();
+  const writtenYamlPaths = new Set();
+  state.experiments.forEach((exp, ei) => {
+    PHASE_DEFS.forEach((def, pi) => {
+      const entry = canonMap[ei][pi];
+      if (entry.canonicalExpIdx !== ei) return; // a sibling already wrote it
+      const path = `${configsSubdir}/${exp.name}/${def.filename}`;
+      if (writtenYamlPaths.has(path)) return; // defensive: never write twice
+      writtenYamlPaths.add(path);
+      const yamlObj = buildPhaseYaml(exp, pi, opts);
+      const text = renderYaml(yamlObj);
+      zip.file(path, text);
+    });
+  });
+  zip.file(opts.launcherName, buildLauncherSh(opts));
+  // Also include a brief README
+  const readme = [
+    "V-JEPA2.1 ablation batch generated by ablation_builder.html",
+    "",
+    `Cluster target:       ${opts.cluster}`,
+    `Python binary:        ${opts.pythonBin}`,
+    `Num GPUs (default):   ${opts.numGpus}`,
+    `Num nodes (default):  ${opts.numNodes}`,
+    `Project root assumed: ${opts.projectRoot}`,
+    `Checkpoint root:      ${opts.checkpointRoot}`,
+    `Configs subdir:       ${configsSubdir}`,
+    "",
+    "The launcher is self-contained (does NOT depend on",
+    "run_three_phases_family_single4.sh). It only needs",
+    "scripts/prepare_runtime_config.py to be present under the project root.",
+    "",
+    "Usage:",
+    `  1. Unzip the contents at the project root (${opts.projectRoot}).`,
+    `  2. chmod +x ${opts.launcherName}`,
+    `  3. ./${opts.launcherName}`,
+    "",
+    "Overrides at run time (env vars):",
+    "  VJEPA_CLUSTER     — label for logging",
+    "  VJEPA_PYTHON_BIN  — path to a different python venv",
+    "  VJEPA_NUM_GPUS    — 1, 2, 4, or 8",
+    "  VJEPA_NUM_NODES   — number of nodes (1 = single-node python -m app.main;",
+    "                      >1 = mpiexec multi-node via app.main_dist_polaris,",
+    "                      must be launched from inside a PBS allocation)",
+    "  VJEPA_DEVICES     — explicit space-separated device list (must match NUM_GPUS,",
+    "                      only used in single-node mode)",
+    "",
+    "Experiments included:",
+    ...state.experiments.map((e, i) => `  ${i + 1}. ${e.name}`),
+  ].join("\n");
+  zip.file("README.txt", readme);
+
+  const blob = await zip.generateAsync({ type: "blob" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+  a.download = `vjepa2_1_ablation_${stamp}.zip`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+});
+
+document.getElementById("exportState").addEventListener("click", () => {
+  const payload = {
+    opts: {
+      ...getOpts(),
+      numGpusOverride: document.getElementById("numGpusOverride").value,
+    },
+    experiments: state.experiments,
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `ablation_state_${new Date().toISOString().slice(0, 10)}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+});
+
+document.getElementById("importState").addEventListener("click", () => {
+  document.getElementById("importFile").click();
+});
+document.getElementById("importFile").addEventListener("change", async (e) => {
+  const f = e.target.files[0];
+  if (!f) return;
+  const text = await f.text();
+  try {
+    const payload = JSON.parse(text);
+    if (payload.opts) {
+      document.getElementById("projectRoot").value = payload.opts.projectRoot || "";
+      document.getElementById("checkpointRoot").value = payload.opts.checkpointRoot || "";
+      document.getElementById("configsSubdir").value = payload.opts.configsSubdir || "";
+      document.getElementById("launcherName").value = payload.opts.launcherName || "run_ablation_batch.sh";
+      if (payload.opts.cluster && CLUSTER_DEFAULTS[payload.opts.cluster]) {
+        document.getElementById("cluster").value = payload.opts.cluster;
+      }
+      if (typeof payload.opts.numGpusOverride === "string") {
+        document.getElementById("numGpusOverride").value = payload.opts.numGpusOverride;
+      }
+      if (typeof payload.opts.sophiaPythonBin === "string" && payload.opts.sophiaPythonBin) {
+        document.getElementById("sophiaPythonBin").value = payload.opts.sophiaPythonBin;
+      }
+      if (typeof payload.opts.polarisPythonBin === "string" && payload.opts.polarisPythonBin) {
+        document.getElementById("polarisPythonBin").value = payload.opts.polarisPythonBin;
+      }
+      if (typeof payload.opts.csvRoot === "string" && payload.opts.csvRoot) {
+        document.getElementById("csvRoot").value = payload.opts.csvRoot;
+      }
+    }
+    if (Array.isArray(payload.experiments)) {
+      state.experiments = payload.experiments;
+      state.preview = { expIdx: 0, phaseIdx: 0, kind: "yaml" };
+    }
+    renderAll();
+  } catch (err) {
+    alert(`Failed to import: ${err.message}`);
+  }
+  e.target.value = "";
+});
+
+// =====================================================================
+// Load existing .sh + YAMLs back into the UI
+// =====================================================================
+function parseShExperiments(shText) {
+  // Strip $ROOT, $ROOT/ and double-quotes; extract relative YAML paths
+  const yamlRegex = /["']?(?:\$ROOT\/|\.\/|\/)?((?:[A-Za-z0-9_\-./]+\/)*[A-Za-z0-9_\-.]+\.ya?ml)["']?/g;
+  // We want them grouped per experiment. The launcher emits, per experiment, a
+  // comment line `# ---- <name> ----` followed by three YAML refs (one per phase).
+  const lines = shText.split(/\r?\n/);
+  const experiments = [];
+  let current = null;
+  for (const line of lines) {
+    const trimmed = line.trim();
+    const commentMatch = trimmed.match(/^#\s*-+\s*(.+?)\s*-+\s*$/);
+    if (commentMatch) {
+      if (current && current.yamls.length > 0) experiments.push(current);
+      current = { name: commentMatch[1], yamls: [] };
+      continue;
+    }
+    if (trimmed.startsWith("#")) continue;
+    let m;
+    yamlRegex.lastIndex = 0;
+    while ((m = yamlRegex.exec(line)) !== null) {
+      const rel = m[1];
+      if (!current) current = { name: null, yamls: [] };
+      current.yamls.push(rel);
+    }
+  }
+  if (current && current.yamls.length > 0) experiments.push(current);
+  // Fall back: if no comments were found, chunk consecutively in groups of 3.
+  if (experiments.length === 1 && !experiments[0].name && experiments[0].yamls.length > 3) {
+    const all = experiments[0].yamls;
+    experiments.length = 0;
+    for (let i = 0; i < all.length; i += 3) {
+      const chunk = all.slice(i, i + 3);
+      const name = chunk[0].split("/").slice(-2, -1)[0] || `experiment_${experiments.length + 1}`;
+      experiments.push({ name, yamls: chunk });
+    }
+  }
+  // Derive names from path if missing
+  experiments.forEach((exp, i) => {
+    if (!exp.name) {
+      const fromPath = exp.yamls[0]?.split("/").slice(-2, -1)[0];
+      exp.name = fromPath || `experiment_${i + 1}`;
+    }
+  });
+  return experiments;
+}
+
+async function fetchYamlText(relPath, uploadedMap) {
+  // Try uploaded files first (matched by basename or by suffix)
+  if (uploadedMap.size > 0) {
+    if (uploadedMap.has(relPath)) return uploadedMap.get(relPath);
+    const base = relPath.split("/").pop();
+    if (uploadedMap.has(base)) return uploadedMap.get(base);
+    // suffix match: any uploaded path ending with relPath
+    for (const [k, v] of uploadedMap) {
+      if (k.endsWith(relPath) || relPath.endsWith(k)) return v;
+    }
+  }
+  // Try same-origin fetch. The page may live in tools/ablation_builder/, so
+  // try absolute-from-root, page-relative, and a couple of upward fallbacks.
+  const clean = relPath.replace(/^\.?\/+/, "");
+  const candidates = [
+    "/" + clean,           // server root (recommended: serve project root)
+    clean,                 // page-relative
+    "../" + clean,         // up one
+    "../../" + clean,      // up two (tools/ablation_builder/ → project root)
+  ];
+  for (const url of candidates) {
+    try {
+      const resp = await fetch(url);
+      if (resp.ok) return await resp.text();
+    } catch (_) {}
+  }
+  return null;
+}
+
+function yamlToPhase(yamlObj, phaseIdx) {
+  // Start from defaults, then merge known fields.
+  const phase = clonePhaseBase();
+  PHASE_DEFS[phaseIdx].overrides(phase);
+  phase._open = phaseIdx === 0;
+
+  if (!yamlObj || typeof yamlObj !== "object") return phase;
+
+  // Top-level
+  for (const k of ["app", "nodes", "tasks_per_node", "cpus_per_task", "mem_per_gpu"]) {
+    if (yamlObj[k] != null) phase[k] = yamlObj[k];
+  }
+
+  // data + datasets/weights/fpcs
+  if (yamlObj.data && typeof yamlObj.data === "object") {
+    const d = yamlObj.data;
+    for (const k of ["num_clips", "dataset_type", "batch_size", "crop_size", "patch_size", "tubelet_size", "fps", "num_workers", "persistent_workers", "pin_mem"]) {
+      if (d[k] != null) phase.data[k] = d[k];
+    }
+    if (Array.isArray(d.datasets)) {
+      const csvList = d.datasets.map((p) => String(p).split("/").pop());
+      const weights = Array.isArray(d.datasets_weights) ? d.datasets_weights : csvList.map(() => 1);
+      const fpcs = Array.isArray(d.dataset_fpcs) ? d.dataset_fpcs : csvList.map(() => 16);
+      // Build a fresh datasets list: enabled rows in file order, then the
+      // default extras as disabled so the user can re-add them with one click.
+      const seen = new Set();
+      const newDatasets = csvList.map((csv, i) => {
+        seen.add(csv);
+        return { csv, enabled: true, weight: weights[i] != null ? weights[i] : 1, fpcs: fpcs[i] != null ? fpcs[i] : 16 };
+      });
+      for (const dflt of DEFAULT_DATASETS) {
+        if (!seen.has(dflt.csv)) newDatasets.push({ ...dflt, enabled: false });
+      }
+      phase.datasets = newDatasets;
+    }
+  }
+
+  // data_aug
+  if (yamlObj.data_aug && typeof yamlObj.data_aug === "object") {
+    Object.assign(phase.data_aug, yamlObj.data_aug);
+  }
+  // loss
+  if (yamlObj.loss && typeof yamlObj.loss === "object") {
+    Object.assign(phase.loss, yamlObj.loss);
+  }
+  // mask
+  if (Array.isArray(yamlObj.mask)) {
+    phase.mask = JSON.parse(JSON.stringify(yamlObj.mask));
+  }
+  // meta
+  if (yamlObj.meta && typeof yamlObj.meta === "object") {
+    Object.assign(phase.meta, yamlObj.meta);
+  }
+  // model
+  if (yamlObj.model && typeof yamlObj.model === "object") {
+    Object.assign(phase.model, yamlObj.model);
+  }
+  // optimization
+  if (yamlObj.optimization && typeof yamlObj.optimization === "object") {
+    Object.assign(phase.optimization, yamlObj.optimization);
+  }
+  return phase;
+}
+
+async function loadShAndYamls(files) {
+  const shFiles = files.filter((f) => f.name.endsWith(".sh"));
+  const yamlFiles = files.filter((f) => /\.ya?ml$/.test(f.name));
+  if (shFiles.length === 0) {
+    alert("Select at least one .sh file (and optionally the referenced .yaml files if they're not served from this URL).");
+    return;
+  }
+  if (shFiles.length > 1) {
+    alert("Pick a single .sh file. (Multiple uploaded.)");
+    return;
+  }
+
+  const uploadedMap = new Map();
+  for (const f of yamlFiles) {
+    const text = await f.text();
+    // Some browsers expose webkitRelativePath; fall back to filename.
+    const path = f.webkitRelativePath || f.name;
+    uploadedMap.set(path, text);
+    uploadedMap.set(f.name, text);
+  }
+
+  const shText = await shFiles[0].text();
+  const parsed = parseShExperiments(shText);
+  if (parsed.length === 0) {
+    alert("Could not find any YAML paths in that .sh file.");
+    return;
+  }
+
+  // Try to recover cluster + python + GPU count from launcher
+  try {
+    const py = shText.match(/PYTHON_BIN="\$\{VJEPA_PYTHON_BIN:-([^"}]+)\}"/);
+    const ng = shText.match(/NUM_GPUS="\$\{VJEPA_NUM_GPUS:-([0-9]+)\}"/);
+    const nn = shText.match(/NUM_NODES="\$\{VJEPA_NUM_NODES:-([0-9]+)\}"/);
+    const cl = shText.match(/CLUSTER="\$\{VJEPA_CLUSTER:-([^"}]+)\}"/);
+    if (cl && CLUSTER_DEFAULTS[cl[1]]) document.getElementById("cluster").value = cl[1];
+    if (ng) document.getElementById("numGpusOverride").value = ng[1];
+    if (nn) document.getElementById("numNodes").value = nn[1];
+    if (py) {
+      // Try to map back to a known cluster by python path
+      for (const [k, v] of Object.entries(CLUSTER_DEFAULTS)) {
+        if (v.pythonBin === py[1]) { document.getElementById("cluster").value = k; break; }
+      }
+    }
+  } catch (_) {}
+
+  const newExperiments = [];
+  const missing = [];
+  for (const expSpec of parsed) {
+    const phases = [];
+    for (let pi = 0; pi < PHASE_DEFS.length; pi++) {
+      const rel = expSpec.yamls[pi];
+      if (!rel) {
+        const fallback = clonePhaseBase();
+        PHASE_DEFS[pi].overrides(fallback);
+        fallback._open = pi === 0;
+        phases.push(fallback);
+        missing.push(`${expSpec.name} / phase ${pi + 1}: no path in .sh`);
+        continue;
+      }
+      const text = await fetchYamlText(rel, uploadedMap);
+      if (!text) {
+        const fallback = clonePhaseBase();
+        PHASE_DEFS[pi].overrides(fallback);
+        fallback._open = pi === 0;
+        phases.push(fallback);
+        missing.push(`${expSpec.name} / phase ${pi + 1}: could not load ${rel}`);
+        continue;
+      }
+      let yamlObj;
+      try { yamlObj = jsyaml.load(text); }
+      catch (e) {
+        missing.push(`${expSpec.name} / phase ${pi + 1}: YAML parse error in ${rel}: ${e.message}`);
+        const fallback = clonePhaseBase();
+        PHASE_DEFS[pi].overrides(fallback);
+        fallback._open = pi === 0;
+        phases.push(fallback);
+        continue;
+      }
+      phases.push(yamlToPhase(yamlObj, pi));
+    }
+    newExperiments.push({ name: expSpec.name, phases });
+  }
+
+  state.experiments = newExperiments;
+  state.preview = { expIdx: 0, phaseIdx: 0, kind: "yaml" };
+  renderAll();
+
+  if (missing.length > 0) {
+    alert(
+      `Loaded ${newExperiments.length} experiment(s), but ${missing.length} phase(s) could not be loaded:\n\n` +
+      missing.join("\n") +
+      `\n\nTip: serve the project root via "python -m http.server" and the YAMLs will fetch automatically. Otherwise re-pick the .sh together with the referenced .yaml files in one go.`
+    );
+  } else {
+    // Silent success — UI already shows the loaded experiments.
+  }
+}
+
+document.getElementById("loadSh").addEventListener("click", () => {
+  document.getElementById("loadShFile").click();
+});
+document.getElementById("loadShFile").addEventListener("change", async (e) => {
+  const files = Array.from(e.target.files || []);
+  if (files.length === 0) return;
+  try {
+    await loadShAndYamls(files);
+  } catch (err) {
+    alert(`Failed to load: ${err.message}\n${err.stack || ""}`);
+  }
+  e.target.value = "";
+});
+
+// Seed with one experiment so the user sees something on first open.
+addExperiment();
+
+// =====================================================================
+// Guided tour
+// A sequence of {target selector, title, body} steps. Click anywhere
+// outside an action button to advance; Next/Back/Skip do the obvious.
+// Each step's target is resolved lazily — if it has been removed/re-
+// rendered (renderAll re-creates DOM), we re-query at display time and
+// silently skip steps whose target is gone.
+// =====================================================================
+const TOUR_STEPS = [
+  {
+    selector: null, // centered intro
+    title: "Welcome to the Ablation Builder",
+    body: "Quick 8-step tour of what's where. Click anywhere — bubble, button, or background — to advance. Press <kbd>Esc</kbd> to leave at any point.",
+  },
+  {
+    selector: "header .brand",
+    title: "You're here",
+    body: "The Argonne · V-JEPA2.1 Ablation Builder. Click the little pixel A if you want to give it a spin.",
+    placement: "bottom",
+  },
+  {
+    selector: ".toolbar",
+    title: "Project-wide settings",
+    body: "Project root, checkpoint root, cluster, GPU count, CSV root. Everything downstream — YAML <code>folder</code>s, launcher python path, chained checkpoint paths — is derived from these.",
+    placement: "bottom",
+  },
+  {
+    selector: "#batchOps > summary",
+    title: "Batch operations",
+    body: "Two power tools: <b>Propagate</b> copies a dataset composition from one experiment to all others. <b>Sweep</b> walks a value (e.g. dataset weight = 0.1 + 0.2·idx) across experiments — perfect for building a real ablation grid in seconds.",
+    placement: "bottom",
+    beforeShow: () => {
+      // Auto-open the batch ops <details> so the user can see what's inside.
+      const d = document.getElementById("batchOps");
+      if (d && !d.open) d.open = true;
+    },
+  },
+  {
+    selector: ".experiment",
+    title: "One card per experiment",
+    body: "Each card is one experiment with its own 3-phase chain (pretrain → main → cooldown). The coloured left rail on each phase matches the flow-view legend: <b style='color:#34c759'>green</b> / <b style='color:#ff9500'>orange</b> / <b style='color:#af52de'>purple</b>.",
+    placement: "right",
+    beforeShow: () => {
+      // Make sure phase 1 is open so the rails inside are visible.
+      const firstExp = state.experiments[0];
+      if (firstExp && firstExp.phases[0] && !firstExp.phases[0]._open) {
+        firstExp.phases[0]._open = true;
+        renderAll();
+      }
+    },
+  },
+  {
+    selector: ".section.sec-datasets",
+    title: "Section colour rails",
+    body: "Each config block has its own colour: <b style='color:#34c759'>datasets</b>, <b style='color:#0072ce'>data</b>, <b style='color:#af52de'>data_aug</b>, <b style='color:#ff3b30'>loss</b>, <b style='color:#ff9500'>meta</b>, <b style='color:#5ac8fa'>model</b>, <b style='color:#ffcc00'>optimization</b>. Numeric values are tinted navy so they pop.",
+    placement: "right",
+  },
+  {
+    selector: ".preview",
+    title: "Live preview",
+    body: "Every edit reflows the YAML on the right immediately. Tabs at the top switch between phase YAMLs and the generated launcher <code>.sh</code> — so you can see exactly what will hit disk before clicking Download.",
+    placement: "left",
+  },
+  {
+    selector: "#visualizeFlow",
+    title: "Visualize flow",
+    body: "Opens a graph view of the whole ablation. Identical phases across experiments merge into a single shared node (the launcher and ZIP dedup them too — shared phases are only trained once). You can also edit per-phase parameters and add/delete experiments from the graph.",
+    placement: "bottom",
+  },
+  {
+    selector: "#downloadZip",
+    title: "Download ZIP",
+    body: "Bundles every YAML and the launcher script into one ZIP, ready to unpack at the project root. The README inside lists what was generated and how to run it.",
+    placement: "bottom",
+  },
+  {
+    selector: "#helpTour",
+    title: "That's it!",
+    body: "Click this <b>?</b> any time to re-run the tour. Have fun ablating.",
+    placement: "bottom",
+  },
+];
+
+const tourState = {
+  active: false,
+  idx: 0,
+  // Bound listeners we need to remove on tour end.
+  onResize: null,
+  onKey: null,
+  onOverlayClick: null,
+  onBubbleClick: null,
+};
+
+function tourStart() {
+  if (tourState.active) return;
+  tourState.active = true;
+  tourState.idx = 0;
+  document.getElementById("tourOverlay").classList.add("open");
+  tourState.onResize = () => tourShow(tourState.idx);
+  window.addEventListener("resize", tourState.onResize);
+  tourState.onKey = (e) => {
+    if (!tourState.active) return;
+    if (e.key === "Escape") tourEnd();
+    else if (e.key === "ArrowRight" || e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      tourNext();
+    } else if (e.key === "ArrowLeft") {
+      e.preventDefault();
+      tourPrev();
+    }
+  };
+  document.addEventListener("keydown", tourState.onKey);
+  tourState.onOverlayClick = (e) => {
+    // Clicking the dim backdrop advances the tour (matches the "click
+    // anywhere to continue" affordance).
+    if (e.target.id === "tourOverlay") tourNext();
+  };
+  document.getElementById("tourOverlay").addEventListener("click", tourState.onOverlayClick);
+  tourState.onBubbleClick = (e) => {
+    // Clicking the bubble itself (but not its buttons) advances.
+    if (e.target.tagName === "BUTTON" || e.target.closest("button")) return;
+    tourNext();
+  };
+  document.getElementById("tourBubble").addEventListener("click", tourState.onBubbleClick);
+  tourShow(0);
+}
+
+function tourEnd() {
+  if (!tourState.active) return;
+  tourState.active = false;
+  document.getElementById("tourOverlay").classList.remove("open");
+  document.getElementById("tourSpotlight").style.display = "none";
+  document.getElementById("tourBubble").style.display = "none";
+  if (tourState.onResize) window.removeEventListener("resize", tourState.onResize);
+  if (tourState.onKey) document.removeEventListener("keydown", tourState.onKey);
+  if (tourState.onOverlayClick) document.getElementById("tourOverlay").removeEventListener("click", tourState.onOverlayClick);
+  if (tourState.onBubbleClick) document.getElementById("tourBubble").removeEventListener("click", tourState.onBubbleClick);
+  tourState.onResize = tourState.onKey = tourState.onOverlayClick = tourState.onBubbleClick = null;
+}
+
+function tourNext() {
+  if (!tourState.active) return;
+  if (tourState.idx >= TOUR_STEPS.length - 1) {
+    tourEnd();
+    return;
+  }
+  tourShow(tourState.idx + 1);
+}
+
+function tourPrev() {
+  if (!tourState.active) return;
+  if (tourState.idx <= 0) return;
+  tourShow(tourState.idx - 1);
+}
+
+function tourShow(idx) {
+  // Skip-forward through any step whose target has vanished (defensive
+  // for re-renders or DOM mutations). Stop if we run past the end.
+  while (idx < TOUR_STEPS.length) {
+    const step = TOUR_STEPS[idx];
+    if (step.beforeShow) {
+      try { step.beforeShow(); } catch (_) {}
+    }
+    if (step.selector == null) break; // intro step, no target needed
+    const target = document.querySelector(step.selector);
+    if (target) break;
+    idx++;
+  }
+  if (idx >= TOUR_STEPS.length) { tourEnd(); return; }
+  tourState.idx = idx;
+  const step = TOUR_STEPS[idx];
+
+  const spotlight = document.getElementById("tourSpotlight");
+  const bubble = document.getElementById("tourBubble");
+
+  // Update bubble content
+  document.getElementById("tourStepNum").textContent = `Step ${idx + 1}`;
+  document.getElementById("tourBubbleTitle").textContent = step.title;
+  document.getElementById("tourBubbleBody").innerHTML = step.body;
+  document.getElementById("tourProgress").textContent = `${idx + 1} / ${TOUR_STEPS.length}`;
+  document.getElementById("tourPrev").disabled = idx === 0;
+  document.getElementById("tourPrev").style.opacity = idx === 0 ? "0.4" : "1";
+  document.getElementById("tourNext").textContent =
+    idx === TOUR_STEPS.length - 1 ? "Finish ✓" : "Next →";
+
+  if (step.selector == null) {
+    // Centered intro bubble, no spotlight.
+    spotlight.style.display = "none";
+    bubble.setAttribute("data-arrow", "none");
+    bubble.style.display = "block";
+    // Center after the browser lays out the bubble.
+    requestAnimationFrame(() => {
+      const r = bubble.getBoundingClientRect();
+      bubble.style.left = `${Math.max(8, (window.innerWidth - r.width) / 2)}px`;
+      bubble.style.top = `${Math.max(8, (window.innerHeight - r.height) / 2)}px`;
+    });
+    return;
+  }
+
+  const target = document.querySelector(step.selector);
+  if (!target) { tourNext(); return; }
+
+  // Bring the target into view first; otherwise the spotlight ends up
+  // off-screen for sections below the fold.
+  target.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
+  // scrollIntoView is async-ish; wait a frame for the new bounding rect.
+  setTimeout(() => tourPositionAt(step, target), 300);
+}
+
+function tourPositionAt(step, target) {
+  const spotlight = document.getElementById("tourSpotlight");
+  const bubble = document.getElementById("tourBubble");
+  const r = target.getBoundingClientRect();
+  const pad = 6;
+  // Spotlight = padded box around the target
+  spotlight.style.display = "block";
+  spotlight.style.top = `${Math.max(0, r.top - pad)}px`;
+  spotlight.style.left = `${Math.max(0, r.left - pad)}px`;
+  spotlight.style.width = `${r.width + pad * 2}px`;
+  spotlight.style.height = `${r.height + pad * 2}px`;
+
+  // Bubble placement
+  bubble.style.display = "block";
+  const placement = step.placement || tourAutoPlacement(r);
+  bubble.setAttribute("data-arrow", tourArrowFor(placement));
+
+  // Measure after display
+  requestAnimationFrame(() => {
+    const b = bubble.getBoundingClientRect();
+    const gap = 16;
+    let top, left;
+    switch (placement) {
+      case "right":
+        left = r.right + gap;
+        top = r.top + Math.max(0, (r.height - b.height) / 2);
+        break;
+      case "left":
+        left = r.left - b.width - gap;
+        top = r.top + Math.max(0, (r.height - b.height) / 2);
+        break;
+      case "top":
+        left = r.left + Math.max(0, (r.width - b.width) / 2);
+        top = r.top - b.height - gap;
+        break;
+      case "bottom":
+      default:
+        left = r.left + Math.max(0, (r.width - b.width) / 2);
+        top = r.bottom + gap;
+    }
+    // Clamp into viewport
+    top = Math.max(8, Math.min(window.innerHeight - b.height - 8, top));
+    left = Math.max(8, Math.min(window.innerWidth - b.width - 8, left));
+    bubble.style.top = `${top}px`;
+    bubble.style.left = `${left}px`;
+  });
+}
+
+function tourAutoPlacement(rect) {
+  // Pick a placement that fits comfortably given the target's screen location.
+  const margin = 360;
+  if (window.innerWidth - rect.right > margin) return "right";
+  if (rect.left > margin) return "left";
+  if (window.innerHeight - rect.bottom > 220) return "bottom";
+  return "top";
+}
+
+function tourArrowFor(placement) {
+  // The arrow on the bubble points TOWARD the target, which is the
+  // OPPOSITE side of where the bubble sits relative to the target.
+  return { right: "left", left: "right", top: "bottom", bottom: "top" }[placement] || "none";
+}
+
+document.getElementById("helpTour").addEventListener("click", tourStart);
+document.getElementById("tourNext").addEventListener("click", (e) => { e.stopPropagation(); tourNext(); });
+document.getElementById("tourPrev").addEventListener("click", (e) => { e.stopPropagation(); tourPrev(); });
+document.getElementById("tourSkip").addEventListener("click", (e) => { e.stopPropagation(); tourEnd(); });
+
+// Little easter-egg: click the pixel logo to spin it. Uses the Web
+// Animations API so we don't pollute the main keyframes loop.
+(function () {
+  const logo = document.getElementById("pixelLogo");
+  if (!logo) return;
+  logo.style.cursor = "pointer";
+  logo.addEventListener("click", () => {
+    logo.animate(
+      [
+        { transform: "rotate(0deg) scale(1)" },
+        { transform: "rotate(180deg) scale(1.12)" },
+        { transform: "rotate(360deg) scale(1)" },
+      ],
+      { duration: 650, easing: "cubic-bezier(0.34, 1.56, 0.64, 1)" },
+    );
+  });
+})();
+
+// =====================================================================
+// Flow visualization (vis-network)
+// Renders the ablation study as a directed graph:
+//   [exp node] --> [phase1] --> [phase2] --> [phase3]
+// Lets the user add a new experiment block, duplicate or delete the
+// selected experiment, and inspect phase contents.
+// =====================================================================
+const PHASE_COLORS = ["#34c759", "#ff9500", "#af52de"];
+
+const vizState = {
+  network: null,
+  nodes: null,        // vis DataSet
+  edges: null,        // vis DataSet
+  selectedNodeId: null,
+};
+
+// Stable JSON.stringify (sorts object keys) so two phases with the same fields
+// in different insertion order still produce the same key.
+function stableStringify(obj) {
+  if (obj === null || typeof obj !== "object") return JSON.stringify(obj);
+  if (Array.isArray(obj)) return "[" + obj.map(stableStringify).join(",") + "]";
+  const keys = Object.keys(obj).sort();
+  return "{" + keys.map((k) => JSON.stringify(k) + ":" + stableStringify(obj[k])).join(",") + "}";
+}
+
+function phaseConfigKey(phase) {
+  // Hash the phase config, excluding UI-only flags. The `folder` field is set
+  // by buildPhaseYaml from the experiment name at emit time and isn't stored
+  // on the phase object, so it doesn't interfere with sharing.
+  const clone = JSON.parse(JSON.stringify(phase));
+  delete clone._open;
+  return stableStringify(clone);
+}
+
+function hash32(s) {
+  // djb2 → 32-bit unsigned → base-36, for short stable node ids.
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+  return (h >>> 0).toString(36);
+}
+
+// Builds the graph with phase deduplication. A phase is shared between two
+// experiments only when BOTH its own config AND the entire upstream chain
+// (every prior phase) match — otherwise the checkpoint chain (phase N reads
+// phase N-1's latest.pth.tar) wouldn't actually be the same run.
+function vizBuildData() {
+  const nodes = [];
+  const edges = [];
+
+  // chainKey -> { id, phase, phaseIdx, expIndices: [] }
+  const phaseNodeByChain = new Map();
+  // expPhaseNodeIds[ei][pi] = shared phase node id
+  const expPhaseNodeIds = state.experiments.map(() => []);
+
+  state.experiments.forEach((exp, ei) => {
+    let chainKey = "";
+    exp.phases.forEach((phase, pi) => {
+      chainKey += "|" + phaseConfigKey(phase);
+      let entry = phaseNodeByChain.get(chainKey);
+      if (!entry) {
+        entry = {
+          id: `phase:${pi}:${hash32(chainKey)}`,
+          phase,
+          phaseIdx: pi,
+          expIndices: [],
+        };
+        phaseNodeByChain.set(chainKey, entry);
+      }
+      entry.expIndices.push(ei);
+      expPhaseNodeIds[ei][pi] = entry.id;
+    });
+  });
+
+  // Experiment nodes
+  state.experiments.forEach((exp, ei) => {
+    nodes.push({
+      id: `exp:${ei}`,
+      label: exp.name,
+      shape: "box",
+      color: { background: "#e8f1ff", border: "#007aff" },
+      font: { color: "#1d1d1f", face: "-apple-system, sans-serif", size: 14, bold: true },
+      borderWidth: 2,
+      margin: 10,
+      _kind: "exp",
+      _expIdx: ei,
+    });
+  });
+
+  // Deduped phase nodes
+  for (const entry of phaseNodeByChain.values()) {
+    const def = PHASE_DEFS[entry.phaseIdx];
+    const shortTitle = def.title.split("—")[1] ? def.title.split("—")[1].trim() : def.title;
+    const enabledCount = entry.phase.datasets.filter((d) => d.enabled).length;
+    const shared = entry.expIndices.length > 1;
+    const sharedTag = shared ? ` ×${entry.expIndices.length}` : "";
+    nodes.push({
+      id: entry.id,
+      label: `${shortTitle}${sharedTag}\n${enabledCount} ds · ${entry.phase.optimization.epochs} ep · ${entry.phase.data.crop_size}px`,
+      shape: "box",
+      // Shared phases get a warmer background so the user can spot them at a glance.
+      color: { background: shared ? "#fff4d6" : "#ffffff", border: PHASE_COLORS[entry.phaseIdx] },
+      font: { color: "#1d1d1f", face: "-apple-system, sans-serif", size: 11, multi: false, bold: shared },
+      borderWidth: shared ? 3 : 2,
+      margin: 8,
+      _kind: "phase",
+      _phaseIdx: entry.phaseIdx,
+      _expIndices: entry.expIndices.slice(),
+      _chainId: entry.id,
+    });
+  }
+
+  // Edges (deduped — if two experiments share both ends of an edge it's
+  // emitted once, with multiple "feeder" experiments folded into one arrow).
+  const seenEdges = new Set();
+  state.experiments.forEach((exp, ei) => {
+    exp.phases.forEach((phase, pi) => {
+      const childId = expPhaseNodeIds[ei][pi];
+      const parentId = pi === 0 ? `exp:${ei}` : expPhaseNodeIds[ei][pi - 1];
+      const edgeKey = `${parentId}->${childId}`;
+      if (seenEdges.has(edgeKey)) return;
+      seenEdges.add(edgeKey);
+      if (pi === 0) {
+        edges.push({
+          from: parentId, to: childId, arrows: "to",
+          color: { color: "#b8b8bf" },
+          smooth: { type: "cubicBezier" },
+        });
+      } else {
+        edges.push({
+          from: parentId, to: childId, arrows: "to",
+          label: "latest.pth.tar",
+          font: { size: 9, color: "#6e6e73", align: "middle" },
+          color: { color: PHASE_COLORS[pi - 1] },
+          smooth: { type: "cubicBezier" },
+        });
+      }
+    });
+  });
+
+  return { nodes, edges };
+}
+
+function vizUpdate() {
+  if (!vizState.network) return;
+  // Capture prior selection metadata BEFORE the rebuild, so we can re-select
+  // the "same" node after a possible fork. For phase nodes the node id is a
+  // hash of the chainKey, which changes whenever any upstream phase config
+  // changes — so id-based restoration alone is not enough.
+  let prevMeta = null;
+  if (vizState.selectedNodeId) {
+    const old = vizState.nodes.get(vizState.selectedNodeId);
+    if (old) {
+      prevMeta = {
+        id: old.id,
+        kind: old._kind,
+        phaseIdx: old._phaseIdx,
+        expIdx: old._expIdx,
+        firstExpIdx: old._expIndices ? old._expIndices[0] : null,
+        // followExpIdx is set by the sidebar editor when the user picks a
+        // non-"all" apply-target; it tells us which fork to track post-edit.
+        followExpIdx: vizState.followExpIdx,
+      };
+    }
+  }
+
+  const { nodes, edges } = vizBuildData();
+  vizState.nodes.clear();
+  vizState.edges.clear();
+  vizState.nodes.add(nodes);
+  vizState.edges.add(edges);
+
+  let newId = null;
+  if (prevMeta) {
+    if (prevMeta.kind === "exp") {
+      const cand = `exp:${prevMeta.expIdx}`;
+      if (vizState.nodes.get(cand)) newId = cand;
+    } else if (prevMeta.kind === "phase") {
+      // Identity-first: if the same chainKey still exists, reuse it.
+      if (vizState.nodes.get(prevMeta.id)) {
+        newId = prevMeta.id;
+      } else {
+        // Fork happened. Find the phase node at the same phaseIdx that now
+        // contains the experiment we were following (or the first owner of
+        // the old shared node as a fallback).
+        const wantEi = prevMeta.followExpIdx != null ? prevMeta.followExpIdx : prevMeta.firstExpIdx;
+        vizState.nodes.forEach((n) => {
+          if (newId) return;
+          if (n._kind === "phase" && n._phaseIdx === prevMeta.phaseIdx && n._expIndices && n._expIndices.includes(wantEi)) {
+            newId = n.id;
+          }
+        });
+      }
+    }
+  }
+
+  if (newId) {
+    vizState.selectedNodeId = newId;
+    vizState.network.selectNodes([newId]);
+    // Safe to refresh: the inline editor uses `change` events (fire on blur),
+    // so there's no active input focus to clobber by the time we get here.
+    // The sidebar needs this to reflect a fork (shared count drops, apply-
+    // target dropdown loses options) and to repopulate input values from the
+    // possibly-cloned phase object.
+    vizRefreshSidebar();
+  } else {
+    vizState.selectedNodeId = null;
+    vizState.followExpIdx = null;
+    vizRefreshSidebar();
+  }
+}
+
+function vizOpen() {
+  const modal = document.getElementById("vizModal");
+  modal.classList.add("open");
+  if (!vizState.network) {
+    vizInit();
+  } else {
+    vizUpdate();
+    // wait a frame, then fit
+    setTimeout(() => vizState.network && vizState.network.fit({ animation: false }), 50);
+  }
+}
+
+function vizClose() {
+  document.getElementById("vizModal").classList.remove("open");
+}
+
+function vizInit() {
+  const container = document.getElementById("vizGraph");
+  const { nodes, edges } = vizBuildData();
+  vizState.nodes = new vis.DataSet(nodes);
+  vizState.edges = new vis.DataSet(edges);
+  const data = { nodes: vizState.nodes, edges: vizState.edges };
+  const options = {
+    layout: {
+      hierarchical: {
+        enabled: true,
+        direction: "LR",
+        sortMethod: "directed",
+        // Extra horizontal breathing room between hierarchical levels so the
+        // wider phase boxes (with more text inside) don't visually collide.
+        nodeSpacing: 180,
+        levelSeparation: 360,
+        treeSpacing: 120,
+      },
+    },
+    physics: { enabled: false },
+    interaction: { hover: true, dragNodes: true, dragView: true, zoomView: true },
+    nodes: {
+      shape: "box",
+      // Bigger nodes: more padding, slightly larger default font, and a
+      // fixed widthConstraint so phase labels with several stats stay
+      // readable without overflowing.
+      margin: 14,
+      widthConstraint: { minimum: 170, maximum: 230 },
+      heightConstraint: { minimum: 56 },
+      font: { size: 13, face: "-apple-system, sans-serif", multi: false },
+    },
+    edges: { arrows: { to: { enabled: true, scaleFactor: 0.6 } } },
+  };
+  vizState.network = new vis.Network(container, data, options);
+  vizState.network.on("selectNode", (params) => {
+    vizState.selectedNodeId = params.nodes[0];
+    vizState.followExpIdx = null;
+    vizRefreshSidebar();
+  });
+  vizState.network.on("deselectNode", () => {
+    vizState.selectedNodeId = null;
+    vizState.followExpIdx = null;
+    vizRefreshSidebar();
+  });
+  vizState.network.on("doubleClick", (params) => {
+    if (!params.nodes.length) return;
+    const node = vizState.nodes.get(params.nodes[0]);
+    if (!node) return;
+    if (node._kind === "exp") {
+      // Jump to that experiment in the builder
+      vizClose();
+      const expEls = document.querySelectorAll(".experiment");
+      const target = expEls[node._expIdx];
+      if (target) target.scrollIntoView({ behavior: "smooth", block: "start" });
+    } else if (node._kind === "phase") {
+      // Open that phase in the preview pane. For shared phases, use the first
+      // owning experiment — the YAML content is identical, only the chained
+      // checkpoint path will differ.
+      const ei = (node._expIndices && node._expIndices[0]) ?? 0;
+      state.preview = { expIdx: ei, phaseIdx: node._phaseIdx, kind: "yaml" };
+      renderPreviewTabs();
+      renderPreview();
+    }
+  });
+}
+
+function vizRefreshSidebar() {
+  const info = document.getElementById("vizSelInfo");
+  const body = document.getElementById("vizSideBody");
+  if (!vizState.selectedNodeId) {
+    info.textContent = "(nothing selected)";
+    body.innerHTML = '<span style="color: var(--muted);">Click a node on the left.</span>';
+    return;
+  }
+  const node = vizState.nodes.get(vizState.selectedNodeId);
+  if (!node) return;
+  if (node._kind === "exp") {
+    const exp = state.experiments[node._expIdx];
+    if (!exp) return;
+    info.textContent = `experiment #${node._expIdx + 1}: ${exp.name}`;
+    const lines = [];
+    lines.push(`<div class="kv"><span class="k">name</span><span>${escapeHtml(exp.name)}</span></div>`);
+    lines.push(`<div class="kv"><span class="k">phases</span><span>${exp.phases.length}</span></div>`);
+    exp.phases.forEach((p, pi) => {
+      const enabled = p.datasets.filter((d) => d.enabled).length;
+      lines.push(
+        `<div class="kv"><span class="k">phase ${pi + 1}</span><span>${enabled} datasets · ${p.optimization.epochs} epochs · ${p.data.crop_size}px · bs ${p.data.batch_size}</span></div>`,
+      );
+    });
+    lines.push('<p class="help">Double-click the experiment to scroll to it in the builder.</p>');
+    body.innerHTML = lines.join("");
+  } else if (node._kind === "phase") {
+    const expIndices = (node._expIndices || []).slice();
+    const firstExpIdx = expIndices[0];
+    const exp = state.experiments[firstExpIdx];
+    const phase = exp && exp.phases[node._phaseIdx];
+    if (!phase) return;
+    const def = PHASE_DEFS[node._phaseIdx];
+    const sharedTag = expIndices.length > 1 ? ` · shared by ${expIndices.length} experiments` : "";
+    info.textContent = `${def.title}${sharedTag}`;
+    body.innerHTML = "";
+    vizRenderPhaseEditor(body, node, expIndices, phase, def);
+  }
+}
+
+// =====================================================================
+// Inline phase editor used by the visualization sidebar.
+// Editable fields: a curated set of high-signal knobs (epochs, ipe,
+// crop_size, batch_size, lr, start_lr, final_lr, fps, eval_freq,
+// save_every_freq, seed). Plus a per-dataset weight editor.
+// For shared phases the user picks an apply-target ("all sharing" /
+// "this experiment only"); writing to "this experiment only" forks
+// the chainKey for that experiment (and every downstream phase of it),
+// which causes the graph to re-route on the very next render.
+// =====================================================================
+function vizRenderPhaseEditor(body, node, expIndices, phase, def) {
+  const isShared = expIndices.length > 1;
+  // Apply target: experiment index (number) OR the literal string "all".
+  // Default to "all" for shared, the single owner for unshared.
+  if (vizState.applyTarget == null || !vizApplyTargetValid(node, expIndices)) {
+    vizState.applyTarget = isShared ? "all" : expIndices[0];
+  }
+
+  // ---- header info ----
+  const head = document.createElement("div");
+  if (isShared) {
+    head.innerHTML =
+      `<div class="kv"><span class="k">shared by</span><span>${expIndices.map((i) => escapeHtml(state.experiments[i].name)).join(", ")}</span></div>` +
+      `<div class="kv"><span class="k">file</span><span>${def.filename}</span></div>`;
+  } else {
+    head.innerHTML =
+      `<div class="kv"><span class="k">experiment</span><span>${escapeHtml(state.experiments[expIndices[0]].name)}</span></div>` +
+      `<div class="kv"><span class="k">file</span><span>${def.filename}</span></div>`;
+  }
+  body.appendChild(head);
+
+  // ---- apply-to selector (only when shared) ----
+  if (isShared) {
+    const wrap = document.createElement("div");
+    wrap.style.cssText = "margin: 8px 0 12px 0; padding: 8px 10px; background: #fff4d6; border: 1px solid #f0d878; border-radius: 6px;";
+    const lbl = document.createElement("label");
+    lbl.style.cssText = "display: block; font-size: 11px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px;";
+    lbl.textContent = "apply edits to";
+    const sel = document.createElement("select");
+    sel.style.cssText = "width: 100%; background: #fff; border: 1px solid var(--border); padding: 5px 8px; border-radius: 6px; font-size: 12px; font-family: ui-monospace, monospace;";
+    const optAll = document.createElement("option");
+    optAll.value = "all";
+    optAll.textContent = `all ${expIndices.length} sharing experiments (keep shared)`;
+    sel.appendChild(optAll);
+    for (const ei of expIndices) {
+      const o = document.createElement("option");
+      o.value = String(ei);
+      o.textContent = `${state.experiments[ei].name} only (will fork)`;
+      sel.appendChild(o);
+    }
+    sel.value = String(vizState.applyTarget);
+    sel.addEventListener("change", () => {
+      vizState.applyTarget = sel.value === "all" ? "all" : parseInt(sel.value, 10);
+      // Track which fork to re-select after a forking edit.
+      vizState.followExpIdx = sel.value === "all" ? expIndices[0] : parseInt(sel.value, 10);
+    });
+    wrap.appendChild(lbl);
+    wrap.appendChild(sel);
+    body.appendChild(wrap);
+  } else {
+    vizState.followExpIdx = expIndices[0];
+  }
+
+  // ---- editable fields ----
+  const editor = document.createElement("div");
+  editor.style.cssText = "display: grid; grid-template-columns: 100px 1fr; gap: 6px 8px; align-items: center; font-family: ui-monospace, monospace; font-size: 11px;";
+
+  // path = e.g. ["optimization", "epochs"]
+  const numericFields = [
+    { label: "epochs",          path: ["optimization", "epochs"],          step: "1",    parse: (v) => Math.max(0, Math.round(Number(v))) },
+    { label: "ipe",             path: ["optimization", "ipe"],             step: "1",    parse: (v) => Math.max(1, Math.round(Number(v))) },
+    { label: "crop_size",       path: ["data",         "crop_size"],       step: "1",    parse: (v) => Math.max(1, Math.round(Number(v))) },
+    { label: "batch_size",      path: ["data",         "batch_size"],      step: "1",    parse: (v) => Math.max(1, Math.round(Number(v))) },
+    { label: "fps",             path: ["data",         "fps"],             step: "1",    parse: (v) => Math.max(1, Math.round(Number(v))) },
+    { label: "lr",              path: ["optimization", "lr"],              step: "any",  parse: (v) => Number(v) },
+    { label: "start_lr",        path: ["optimization", "start_lr"],        step: "any",  parse: (v) => Number(v) },
+    { label: "final_lr",        path: ["optimization", "final_lr"],        step: "any",  parse: (v) => Number(v) },
+    { label: "warmup",          path: ["optimization", "warmup"],          step: "any",  parse: (v) => Number(v) },
+    { label: "weight_decay",    path: ["optimization", "weight_decay"],    step: "any",  parse: (v) => Number(v) },
+    { label: "eval_freq",       path: ["meta",         "eval_freq"],       step: "1",    parse: (v) => Math.max(1, Math.round(Number(v))) },
+    { label: "save_every_freq", path: ["meta",         "save_every_freq"], step: "1",    parse: (v) => Math.max(1, Math.round(Number(v))) },
+    { label: "seed",            path: ["meta",         "seed"],            step: "1",    parse: (v) => Math.round(Number(v)) },
+  ];
+
+  for (const f of numericFields) {
+    const labelEl = document.createElement("div");
+    labelEl.style.color = "var(--muted)";
+    labelEl.textContent = f.label;
+    const inp = document.createElement("input");
+    inp.type = "number";
+    inp.step = f.step;
+    inp.value = String(getByPath(phase, f.path));
+    inp.style.cssText = "background: #fff; border: 1px solid var(--border); padding: 4px 7px; border-radius: 5px; font-size: 11px; font-family: ui-monospace, monospace; width: 100%;";
+    inp.addEventListener("change", () => {
+      const parsed = f.parse(inp.value);
+      if (!Number.isFinite(parsed)) {
+        inp.value = String(getByPath(phase, f.path));
+        return;
+      }
+      vizApplyPhaseEdit(node, expIndices, f.path, parsed);
+    });
+    editor.appendChild(labelEl);
+    editor.appendChild(inp);
+  }
+
+  // weight_distance_loss as a checkbox
+  const wdlLabel = document.createElement("div");
+  wdlLabel.style.color = "var(--muted)";
+  wdlLabel.textContent = "weight_dist_loss";
+  const wdlInput = document.createElement("input");
+  wdlInput.type = "checkbox";
+  wdlInput.checked = !!phase.loss.weight_distance_loss;
+  wdlInput.addEventListener("change", () => {
+    vizApplyPhaseEdit(node, expIndices, ["loss", "weight_distance_loss"], wdlInput.checked);
+  });
+  editor.appendChild(wdlLabel);
+  editor.appendChild(wdlInput);
+
+  body.appendChild(document.createElement("hr")).style.cssText = "border: none; border-top: 1px solid var(--border); margin: 10px 0;";
+  const editorTitle = document.createElement("h3");
+  editorTitle.textContent = "Edit parameters";
+  body.appendChild(editorTitle);
+  body.appendChild(editor);
+
+  // ---- per-dataset weight + enabled editor ----
+  const dsTitle = document.createElement("h3");
+  dsTitle.style.marginTop = "12px";
+  const enabledCount = phase.datasets.filter((d) => d.enabled).length;
+  dsTitle.textContent = `Datasets (${enabledCount} enabled)`;
+  body.appendChild(dsTitle);
+
+  const dsList = document.createElement("div");
+  dsList.style.cssText = "display: flex; flex-direction: column; gap: 3px; font-family: ui-monospace, monospace; font-size: 11px;";
+  phase.datasets.forEach((d, di) => {
+    const row = document.createElement("div");
+    row.style.cssText = "display: grid; grid-template-columns: 16px 1fr 56px; gap: 6px; align-items: center; padding: 2px 4px; border-radius: 4px;";
+    if (!d.enabled) row.style.opacity = "0.45";
+
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.checked = d.enabled;
+    cb.style.accentColor = "var(--accent)";
+    cb.addEventListener("change", () => {
+      vizApplyPhaseEdit(node, expIndices, ["datasets", di, "enabled"], cb.checked);
+    });
+
+    const name = document.createElement("div");
+    name.textContent = d.csv;
+    name.title = d.csv;
+    name.style.cssText = "overflow: hidden; text-overflow: ellipsis; white-space: nowrap;";
+
+    const wInput = document.createElement("input");
+    wInput.type = "number";
+    wInput.step = "0.01";
+    wInput.value = String(d.weight);
+    wInput.style.cssText = "background: #fff; border: 1px solid var(--border); padding: 3px 6px; border-radius: 4px; font-size: 11px; font-family: ui-monospace, monospace; width: 100%;";
+    wInput.addEventListener("change", () => {
+      const v = Number(wInput.value);
+      if (!Number.isFinite(v)) { wInput.value = String(d.weight); return; }
+      vizApplyPhaseEdit(node, expIndices, ["datasets", di, "weight"], v);
+    });
+
+    row.appendChild(cb);
+    row.appendChild(name);
+    row.appendChild(wInput);
+    dsList.appendChild(row);
+  });
+  body.appendChild(dsList);
+
+  const help = document.createElement("p");
+  help.className = "help";
+  help.style.marginTop = "10px";
+  if (isShared) {
+    help.innerHTML = 'Shared with multiple experiments. <b>"all"</b> keeps them in sync; <b>"this experiment only"</b> forks this node — the graph and launcher will reflect the split immediately.';
+  } else {
+    help.textContent = "Edits write through to the builder panel and the YAML preview live.";
+  }
+  body.appendChild(help);
+}
+
+function getByPath(obj, path) {
+  let cur = obj;
+  for (const k of path) cur = cur == null ? undefined : cur[k];
+  return cur;
+}
+function setByPath(obj, path, value) {
+  let cur = obj;
+  for (let i = 0; i < path.length - 1; i++) cur = cur[path[i]];
+  cur[path[path.length - 1]] = value;
+}
+
+function vizApplyTargetValid(node, expIndices) {
+  if (vizState.applyTarget === "all") return true;
+  return expIndices.includes(vizState.applyTarget);
+}
+
+// Apply an edit to either every experiment that currently shares the
+// selected phase node (target === "all") or to a single experiment.
+// In the single-experiment case we DEEP-CLONE the phase first so the
+// other sharers keep their unchanged object identity & content — that's
+// what causes computePhaseCanonicalMap to fork them apart.
+function vizApplyPhaseEdit(node, expIndices, path, value) {
+  const target = vizState.applyTarget;
+  const phaseIdx = node._phaseIdx;
+  if (target === "all") {
+    for (const ei of expIndices) {
+      setByPath(state.experiments[ei].phases[phaseIdx], path, value);
+    }
+    // Selection identity is preserved since all sharers move together.
+    vizState.followExpIdx = expIndices[0];
+  } else {
+    const ei = target;
+    // Defensive: if for some reason this experiment is the only sharer,
+    // a plain in-place edit is fine. Otherwise we must clone so the
+    // OTHER sharers stay pointing at the unchanged config.
+    const exp = state.experiments[ei];
+    if (expIndices.length > 1) {
+      exp.phases[phaseIdx] = JSON.parse(JSON.stringify(exp.phases[phaseIdx]));
+    }
+    setByPath(exp.phases[phaseIdx], path, value);
+    vizState.followExpIdx = ei;
+  }
+  // renderAll cascades to: builder DOM, preview pane, batch-op selects,
+  // and (because it is monkey-patched at the bottom of the script) the
+  // viz graph + sidebar.
+  renderAll();
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  }[c]));
+}
+
+function vizDeleteSelected() {
+  if (!vizState.selectedNodeId) {
+    alert("Select an experiment node first.");
+    return;
+  }
+  const node = vizState.nodes.get(vizState.selectedNodeId);
+  if (!node) return;
+  if (node._kind !== "exp") {
+    alert("Only whole experiment blocks can be deleted from the flow view. (A 3-phase chain is one experiment.)");
+    return;
+  }
+  const exp = state.experiments[node._expIdx];
+  if (!confirm(`Delete experiment "${exp.name}" and all 3 phases?`)) return;
+  state.experiments.splice(node._expIdx, 1);
+  if (state.preview.expIdx >= state.experiments.length) state.preview.expIdx = Math.max(0, state.experiments.length - 1);
+  vizState.selectedNodeId = null;
+  renderAll();
+  vizUpdate();
+}
+
+function vizDuplicateSelected() {
+  if (!vizState.selectedNodeId) {
+    alert("Select an experiment node first.");
+    return;
+  }
+  const node = vizState.nodes.get(vizState.selectedNodeId);
+  if (!node || node._kind !== "exp") {
+    alert("Pick an experiment node (the blue box) to duplicate.");
+    return;
+  }
+  const exp = state.experiments[node._expIdx];
+  const copy = JSON.parse(JSON.stringify(exp));
+  copy.name = nextDuplicateName(exp.name);
+  state.experiments.splice(node._expIdx + 1, 0, copy);
+  renderAll();
+  vizUpdate();
+  vizState.selectedNodeId = `exp:${node._expIdx + 1}`;
+  if (vizState.network) vizState.network.selectNodes([vizState.selectedNodeId]);
+  vizRefreshSidebar();
+}
+
+function vizAddExperiment() {
+  addExperiment();
+  vizUpdate();
+  const newIdx = state.experiments.length - 1;
+  vizState.selectedNodeId = `exp:${newIdx}`;
+  if (vizState.network) {
+    vizState.network.selectNodes([vizState.selectedNodeId]);
+    setTimeout(() => vizState.network.fit({ animation: true }), 50);
+  }
+  vizRefreshSidebar();
+}
+
+document.getElementById("visualizeFlow").addEventListener("click", vizOpen);
+document.getElementById("vizClose").addEventListener("click", vizClose);
+document.getElementById("vizAddExp").addEventListener("click", vizAddExperiment);
+document.getElementById("vizDeleteSelected").addEventListener("click", vizDeleteSelected);
+document.getElementById("vizDuplicateSelected").addEventListener("click", vizDuplicateSelected);
+document.getElementById("vizFit").addEventListener("click", () => {
+  if (vizState.network) vizState.network.fit({ animation: true });
+});
+document.getElementById("vizRelayout").addEventListener("click", () => {
+  if (!vizState.network) return;
+  vizState.network.setOptions({ layout: { hierarchical: { enabled: true } } });
+  vizState.network.stabilize();
+});
+
+// Close modal when clicking the backdrop (but not when clicking inside the modal card)
+document.getElementById("vizModal").addEventListener("click", (e) => {
+  if (e.target.id === "vizModal") vizClose();
+});
+// Escape to close
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && document.getElementById("vizModal").classList.contains("open")) vizClose();
+});
+
+// Keep the graph in sync whenever the builder state changes and the modal is open.
+const _origRenderAll = renderAll;
+renderAll = function () {
+  _origRenderAll();
+  if (document.getElementById("vizModal").classList.contains("open")) {
+    vizUpdate();
+  }
+};
+</script>
+</body>
+</html>
