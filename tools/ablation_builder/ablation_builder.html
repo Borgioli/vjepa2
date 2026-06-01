@@ -212,6 +212,10 @@
   .csv-root-row { display: flex; gap: 6px; align-items: center; }
   .csv-root-row input[type=text] { flex: 1; }
   .csv-root-row button { font-size: 11px; padding: 5px 10px; white-space: nowrap; }
+  .csv-paste-box { margin-top: 8px; padding: 10px; border: 1px dashed var(--border); border-radius: 6px; background: var(--panel2); }
+  .csv-paste-box textarea { width: 100%; box-sizing: border-box; background: #ffffff; color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 6px 9px; font-size: 12px; font-family: ui-monospace, "SF Mono", monospace; resize: vertical; }
+  .csv-paste-actions { display: flex; gap: 6px; margin-top: 6px; }
+  .csv-paste-actions button { font-size: 11px; padding: 5px 12px; }
   @media (max-width: 1100px) { .batch-ops .ops-body { grid-template-columns: 1fr; } }
   ::-webkit-scrollbar { width: 10px; height: 10px; }
   ::-webkit-scrollbar-track { background: transparent; }
@@ -583,7 +587,18 @@
         <div class="csv-root-row">
           <input id="csvRoot" type="text" value="/path/to/app/csv_data" />
           <button type="button" id="csvRootBrowse" title="Pick a local folder to scan for .csv filenames (used by the Sweep picker). The text path is what gets written into the generated YAMLs.">Browse…</button>
+          <button type="button" id="csvRootPaste" title="CSVs live on Globus or another remote system? Paste the output of `ls *.csv` here — the tool will extract filenames.">Paste list</button>
+          <button type="button" id="csvRootManifestBtn" title="Upload a text file with one .csv filename per line (e.g. `ls *.csv > manifest.txt`). JSON arrays of strings also work.">Upload manifest</button>
           <input id="csvRootPicker" type="file" webkitdirectory directory multiple style="display:none" />
+          <input id="csvRootManifest" type="file" accept=".txt,.json,.list,text/plain,application/json" style="display:none" />
+        </div>
+        <div id="csvRootPasteBox" class="csv-paste-box" style="display:none">
+          <p class="help" style="margin:0 0 6px;">Paste filenames (one per line) — output of <code>ls *.csv</code>, <code>find … -name '*.csv'</code>, full paths, or a JSON array all work. Non-csv lines are ignored.</p>
+          <textarea id="csvRootPasteArea" rows="6" placeholder="path_CRCD.csv&#10;path_EndoVis15.csv&#10;…"></textarea>
+          <div class="csv-paste-actions">
+            <button type="button" id="csvRootPasteApply" class="primary">Use these names</button>
+            <button type="button" id="csvRootPasteCancel">Cancel</button>
+          </div>
         </div>
       </div>
     </div>
@@ -1882,7 +1897,7 @@ function refreshBatchOpsSelects() {
   if (csvs.length === 0) {
     const empty = document.createElement("div");
     empty.className = "csv-picker-empty";
-    empty.textContent = "No CSVs loaded yet — click “Browse…” next to “CSV root folder” above and pick the folder containing your .csv files.";
+    empty.textContent = "No CSVs loaded yet — next to “CSV root folder” above: click “Browse…” for a local folder, or use “Paste list” / “Upload manifest” if the CSVs live on Globus or another remote system (paste the output of `ls *.csv`).";
     sweepCsv.appendChild(empty);
   } else {
     for (const csv of csvs) {
@@ -2097,6 +2112,57 @@ document.getElementById("csvRoot").addEventListener("input", () => {
   renderAll();
 });
 
+// Pull .csv basenames out of arbitrary user input: a paste of `ls`, full paths
+// from `find`, a JSON array of strings, etc. Liberal on input, strict on output.
+function extractCsvNames(text) {
+  if (!text) return [];
+  let candidates = [];
+  // Try JSON first — supports `["a.csv","b.csv"]` and Globus-style listings
+  // that contain {"name": "..."} objects.
+  const trimmed = text.trim();
+  if (trimmed.startsWith("[") || trimmed.startsWith("{")) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      const walk = (v) => {
+        if (typeof v === "string") candidates.push(v);
+        else if (Array.isArray(v)) v.forEach(walk);
+        else if (v && typeof v === "object") {
+          if (typeof v.name === "string") candidates.push(v.name);
+          else Object.values(v).forEach(walk);
+        }
+      };
+      walk(parsed);
+    } catch { /* fall through to line-based parsing */ }
+  }
+  if (candidates.length === 0) {
+    // Line-based: split on any whitespace/newlines. Handles `ls -1` (one per
+    // line) AND `ls` default (space-separated across one line).
+    candidates = text.split(/[\s,]+/);
+  }
+  const out = new Set();
+  for (let c of candidates) {
+    c = String(c).trim().replace(/^["']|["']$/g, "");
+    if (!c) continue;
+    // Strip any leading directory components — keep just the basename.
+    const base = c.split(/[\\/]/).pop();
+    if (base && base.toLowerCase().endsWith(".csv")) out.add(base);
+  }
+  return Array.from(out).sort();
+}
+
+function setKnownCsvs(csvs, source) {
+  KNOWN_CSVS = Array.from(new Set(csvs)).sort();
+  const status = document.getElementById("csvRootStatus");
+  if (status) {
+    const n = KNOWN_CSVS.length;
+    status.textContent = n
+      ? `(${n} csv${n === 1 ? "" : "s"} loaded${source ? ` from ${source}` : ""})`
+      : "";
+  }
+  refreshBatchOpsSelects();
+  renderAll();
+}
+
 // Folder picker: read the .csv filenames from whatever local folder the user
 // chooses, and use those as the Sweep picker's list. Browsers don't expose the
 // real folder path for security reasons, so the text input keeps whatever the
@@ -2107,12 +2173,7 @@ document.getElementById("csvRootBrowse").addEventListener("click", () => {
 });
 document.getElementById("csvRootPicker").addEventListener("change", (ev) => {
   const files = Array.from(ev.target.files || []);
-  const csvs = Array.from(new Set(
-    files
-      .map((f) => f.name)
-      .filter((n) => n.toLowerCase().endsWith(".csv"))
-  )).sort();
-  KNOWN_CSVS = csvs;
+  const csvs = files.map((f) => f.name).filter((n) => n.toLowerCase().endsWith(".csv"));
   // Auto-fill the text input with the picked folder name if it still looks
   // like the placeholder — otherwise leave whatever the user typed in place.
   if (files[0] && files[0].webkitRelativePath) {
@@ -2122,12 +2183,54 @@ document.getElementById("csvRootPicker").addEventListener("change", (ev) => {
       rootInp.value = folderName;
     }
   }
-  const status = document.getElementById("csvRootStatus");
-  if (status) status.textContent = `(${csvs.length} csv${csvs.length === 1 ? "" : "s"} loaded)`;
-  refreshBatchOpsSelects();
-  renderAll();
-  // Reset the input so picking the same folder again still fires `change`.
+  setKnownCsvs(csvs, "folder");
+  ev.target.value = "";  // re-pick same folder still fires `change`
+});
+
+// Paste-list mode: for CSVs that live on Globus or another remote system the
+// browser can't read directly. User runs `ls *.csv` (or similar) on the remote
+// side and pastes the output here.
+const pasteBox = document.getElementById("csvRootPasteBox");
+const pasteArea = document.getElementById("csvRootPasteArea");
+document.getElementById("csvRootPaste").addEventListener("click", () => {
+  const showing = pasteBox.style.display !== "none";
+  pasteBox.style.display = showing ? "none" : "block";
+  if (!showing) pasteArea.focus();
+});
+document.getElementById("csvRootPasteCancel").addEventListener("click", () => {
+  pasteBox.style.display = "none";
+});
+document.getElementById("csvRootPasteApply").addEventListener("click", () => {
+  const csvs = extractCsvNames(pasteArea.value);
+  if (csvs.length === 0) {
+    alert("No .csv filenames found in that input. Each line should be (or contain) a *.csv name.");
+    return;
+  }
+  setKnownCsvs(csvs, "paste");
+  pasteBox.style.display = "none";
+  pasteArea.value = "";
+});
+
+// Manifest file: same logic, but reading from a .txt/.json file the user
+// uploads instead of pasting.
+document.getElementById("csvRootManifestBtn").addEventListener("click", () => {
+  document.getElementById("csvRootManifest").click();
+});
+document.getElementById("csvRootManifest").addEventListener("change", async (ev) => {
+  const file = (ev.target.files || [])[0];
   ev.target.value = "";
+  if (!file) return;
+  try {
+    const text = await file.text();
+    const csvs = extractCsvNames(text);
+    if (csvs.length === 0) {
+      alert(`No .csv filenames found in "${file.name}".`);
+      return;
+    }
+    setKnownCsvs(csvs, `manifest "${file.name}"`);
+  } catch (e) {
+    alert(`Could not read "${file.name}": ${e.message || e}`);
+  }
 });
 document.getElementById("cluster").addEventListener("change", () => {
   renderPreview();
