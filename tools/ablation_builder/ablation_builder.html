@@ -2828,47 +2828,47 @@ const TOUR_STEPS = [
   {
     selector: null, // centered intro
     title: "Welcome to the Ablation Builder",
-    body: "Quick tour of what's where. Click anywhere — bubble, button, or background — to advance. Press <kbd>Esc</kbd> to leave at any point.",
+    body: "Quick tour of what's where. Click anywhere (bubble, button, background) to advance. Press <kbd>Esc</kbd> to leave.",
   },
   {
     selector: "header .brand",
     title: "You're here",
-    body: "The Argonne · V-JEPA2.1 Ablation Builder. Click the little pixel A if you want to give it a spin.",
+    body: "The Argonne V-JEPA2.1 Ablation Builder. Click the little pixel A if you want to give it a spin.",
     placement: "bottom",
   },
   {
     selector: ".toolbar",
     title: "Project-wide settings",
-    body: "Project root, checkpoint root, cluster, GPU count, CSV root. Everything downstream — YAML <code>folder</code>s, launcher python path, chained checkpoint paths — is derived from these.",
+    body: "Project root, checkpoint root, cluster, GPU count, CSV root. Everything downstream (YAML <code>folder</code>s, launcher python path, chained checkpoint paths) is derived from these.",
     placement: "bottom",
   },
   {
     selector: "#csvRoot",
-    title: "CSV root — and how to load the filenames",
+    title: "CSV root and how to load the filenames",
     body:
-      "<b>Text input:</b> the absolute path that gets written into every generated YAML " +
+      "<b>Text input.</b> The absolute path written into every generated YAML " +
       "(e.g. <code>data: csv: /your/path/path_CRCD.csv</code>). Type whatever the training nodes " +
-      "will see — local, NFS, Globus mount, anything.<br><br>" +
-      "The three buttons next to it only feed the <b>Sweep</b> picker the list of available " +
-      ".csv filenames — they don't change the text path.<br><br>" +
-      "<b>Browse…</b> — local folder. Picks a directory on this machine and lists every " +
-      "<code>*.csv</code> inside. Browsers refuse to expose the folder's real absolute path, " +
-      "so you still need to type the server-side path in the box yourself.<br><br>" +
-      "<b>Paste list</b> — for <b>Globus</b> or any remote system the browser can't read directly. " +
+      "will see: local, NFS, Globus mount, whatever.<br><br>" +
+      "The three buttons next to it only feed the <b>Sweep</b> picker a list of available " +
+      ".csv filenames. They don't change the text path.<br><br>" +
+      "<b>Browse…</b> picks a local folder and lists every <code>*.csv</code> inside. " +
+      "Browsers won't expose the folder's real absolute path, so you still need to type " +
+      "the server-side path in the box yourself.<br><br>" +
+      "<b>Paste list</b> is for <b>Globus</b> or any remote system the browser can't read directly. " +
       "On the remote side run <code>ls *.csv</code> (or <code>find . -name '*.csv'</code>, full " +
-      "paths, even a JSON array — all accepted), then paste the output into the textarea. " +
+      "paths, a JSON array, whatever you have) and paste the output into the textarea. " +
       "Leading directories are stripped, non-csv lines are ignored, duplicates are merged.<br><br>" +
-      "<b>Upload manifest</b> — same parser, but reads a <code>.txt</code> / <code>.json</code> " +
-      "file you uploaded. Handy if you'd rather <code>ls *.csv > manifest.txt</code> once and " +
+      "<b>Upload manifest</b> runs the same parser on a <code>.txt</code> or <code>.json</code> " +
+      "file you upload. Handy if you'd rather <code>ls *.csv > manifest.txt</code> once and " +
       "keep the file around.<br><br>" +
-      "The little count next to the label tells you how many CSVs are currently loaded and from " +
-      "where (folder / paste / manifest).",
+      "The little count next to the label shows how many CSVs are loaded and where they came from " +
+      "(folder, paste, manifest).",
     placement: "bottom",
   },
   {
     selector: "#batchOps > summary",
     title: "Batch operations",
-    body: "Two power tools: <b>Propagate</b> copies a dataset composition from one experiment to all others. <b>Sweep</b> walks a value (e.g. dataset weight = 0.1 + 0.2·idx) across experiments — perfect for building a real ablation grid in seconds. The Sweep CSV picker only lists names you've loaded via <b>Browse… / Paste list / Upload manifest</b> in the toolbar above, so the row's empty until you point it at your CSVs.",
+    body: "Two tools. <b>Propagate</b> copies a dataset composition from one experiment to all the others. <b>Sweep</b> walks a value across experiments (e.g. dataset weight = 0.1 + 0.2·idx), which gets you a real ablation grid in seconds. The Sweep CSV picker only lists names you've loaded via <b>Browse… / Paste list / Upload manifest</b> in the toolbar above, so it stays empty until you point it at your CSVs.",
     placement: "bottom",
     beforeShow: () => {
       // Auto-open the batch ops <details> so the user can see what's inside.
@@ -2879,7 +2879,7 @@ const TOUR_STEPS = [
   {
     selector: ".experiment",
     title: "One card per experiment",
-    body: "Each card is one experiment with its own 3-phase chain (pretrain → main → cooldown). The coloured left rail on each phase matches the flow-view legend: <b style='color:#34c759'>green</b> / <b style='color:#ff9500'>orange</b> / <b style='color:#af52de'>purple</b>.",
+    body: "Each card is one experiment with its own 3-phase chain (pretrain, main, cooldown). The coloured left rail on each phase matches the flow-view legend: <b style='color:#34c759'>green</b> / <b style='color:#ff9500'>orange</b> / <b style='color:#af52de'>purple</b>.",
     placement: "right",
     beforeShow: () => {
       // Make sure phase 1 is open so the rails inside are visible.
@@ -2893,13 +2893,13 @@ const TOUR_STEPS = [
   {
     selector: ".preview",
     title: "Live preview",
-    body: "Every edit reflows the YAML on the right immediately. Tabs at the top switch between phase YAMLs and the generated launcher <code>.sh</code> — so you can see exactly what will hit disk before clicking Download.",
+    body: "Every edit reflows the YAML on the right immediately. Tabs at the top switch between phase YAMLs and the generated launcher <code>.sh</code>, so you can see exactly what will hit disk before clicking Download.",
     placement: "left",
   },
   {
     selector: "#visualizeFlow",
     title: "Visualize flow",
-    body: "Opens a graph view of the whole ablation. Identical phases across experiments merge into a single shared node (the launcher and ZIP dedup them too — shared phases are only trained once). You can also edit per-phase parameters and add/delete experiments from the graph.",
+    body: "Opens a graph view of the whole ablation. Identical phases across experiments merge into a single shared node (the launcher and ZIP dedup them too, so shared phases are only trained once). You can also edit per-phase parameters and add or delete experiments from the graph.",
     placement: "bottom",
   },
   {
@@ -2910,7 +2910,7 @@ const TOUR_STEPS = [
   },
   {
     selector: "#helpTour",
-    title: "That's it!",
+    title: "That's it",
     body: "Click this <b>?</b> any time to re-run the tour. Have fun ablating.",
     placement: "bottom",
   },
