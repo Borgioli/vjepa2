@@ -409,6 +409,59 @@
 </style>
 </head>
 <body>
+
+<!-- =====================================================================
+     First-visit hint: nudges the user toward the guided tour (? button).
+     Auto-hides on click or after a few seconds. Remembered in localStorage
+     so returning users aren't pestered.
+     ===================================================================== -->
+<style>
+  #firstHint {
+    position: fixed; top: 64px; right: 16px; z-index: 9999;
+    max-width: 280px; padding: 10px 12px 10px 14px;
+    background: #fff; color: #333;
+    border: 1px solid var(--border, #d0d7de);
+    border-left: 4px solid var(--argonne-blue, #0072ce);
+    border-radius: 8px;
+    box-shadow: 0 6px 24px rgba(0,0,0,0.15);
+    font: 13px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    opacity: 0; transform: translateY(-6px);
+    transition: opacity 0.25s ease, transform 0.25s ease;
+    pointer-events: none;
+  }
+  #firstHint.show { opacity: 1; transform: translateY(0); pointer-events: auto; }
+  #firstHint b { color: var(--argonne-blue, #0072ce); }
+  #firstHint .hint-close {
+    position: absolute; top: 2px; right: 6px;
+    background: none; border: none; cursor: pointer;
+    color: #888; font-size: 16px; line-height: 1; padding: 2px 4px;
+  }
+  #firstHint .hint-close:hover { color: #333; }
+</style>
+<div id="firstHint" role="status" aria-live="polite">
+  <button class="hint-close" aria-label="Dismiss" title="Dismiss">&times;</button>
+  👋 New here? Click the <b>?</b> button in the top bar for a quick guided tour of the tool.
+</div>
+<script>
+  (function () {
+    try {
+      if (localStorage.getItem("ablationBuilder.firstHintSeen") === "1") return;
+    } catch (_) { /* localStorage may be blocked; show the hint anyway */ }
+    var hint = document.getElementById("firstHint");
+    if (!hint) return;
+    var dismiss = function () {
+      hint.classList.remove("show");
+      try { localStorage.setItem("ablationBuilder.firstHintSeen", "1"); } catch (_) {}
+    };
+    // Reveal after a short delay so it animates in after page paint.
+    setTimeout(function () { hint.classList.add("show"); }, 400);
+    // Auto-hide after ~9 seconds.
+    setTimeout(dismiss, 9400);
+    // Click anywhere on the bubble (or the close button) dismisses.
+    hint.addEventListener("click", dismiss);
+  })();
+</script>
+
 <header>
   <div class="brand" title="Argonne-inspired pixel mark · click for a little spin">
     <div class="pixel-logo" id="pixelLogo" aria-hidden="true"></div>
