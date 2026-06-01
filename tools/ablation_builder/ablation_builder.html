@@ -127,6 +127,23 @@
   .preview-tabs button { padding: 3px 10px; font-size: 12px; border-radius: 6px; }
   .preview-tabs button.active { background: var(--accent); color: #ffffff; border-color: var(--accent); }
   pre.preview-body { margin: 0; padding: 16px; font-size: 12px; line-height: 1.55; white-space: pre-wrap; word-break: break-word; color: #1d1d1f; font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace; background: #ffffff; }
+  /* Syntax highlighting for the YAML / shell preview on the right.
+     Colours are tuned to read well against the white preview background
+     and stay close to the rest of the app's Argonne-blue palette. */
+  pre.preview-body .tok-key      { color: #0072ce; font-weight: 600; }     /* YAML key */
+  pre.preview-body .tok-str      { color: #1a7a3a; }                       /* string literal */
+  pre.preview-body .tok-num      { color: #af52de; font-weight: 600; }     /* number */
+  pre.preview-body .tok-bool     { color: #ff9500; font-weight: 600; }     /* true/false/null/yes/no */
+  pre.preview-body .tok-comment  { color: #8a8a8e; font-style: italic; }   /* # comment */
+  pre.preview-body .tok-dash     { color: #ff3b30; font-weight: 600; }     /* YAML list marker */
+  pre.preview-body .tok-anchor   { color: #5ac8fa; }                       /* &anchor / *alias */
+  pre.preview-body .tok-tag      { color: #af52de; }                       /* !!type tag */
+  pre.preview-body .tok-shkw     { color: #0072ce; font-weight: 600; }     /* shell keyword */
+  pre.preview-body .tok-shbuiltin{ color: #af52de; font-weight: 600; }     /* shell builtin */
+  pre.preview-body .tok-shvar    { color: #ff9500; }                       /* $VAR */
+  pre.preview-body .tok-shopt    { color: #1a7a3a; }                       /* --flag */
+  pre.preview-body .tok-shfn     { color: #0072ce; font-weight: 600; }     /* function name */
+  pre.preview-body .tok-shebang  { color: #8a8a8e; font-style: italic; }   /* #!/usr/bin/env … */
   .experiment { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 16px; box-shadow: var(--shadow-sm); overflow: hidden; }
   .exp-head { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-bottom: 1px solid var(--border); background: var(--panel2); }
   .exp-head input.exp-name { flex: 1; background: #ffffff; border: 1px solid var(--border); padding: 7px 10px; border-radius: 8px; color: var(--text); font-size: 14px; font-weight: 600; font-family: inherit; }
@@ -1798,10 +1815,157 @@ function renderPreviewTabs() {
   previewTabs.appendChild(tab("launcher.sh", "sh", -1, -1));
 }
 
+// ---------------------------------------------------------------------
+// Lightweight syntax highlighters for the preview pane.
+// Pure regex passes — no external dependency. We escape HTML first, then
+// wrap matches in <span class="tok-…">; the .tok-* classes are styled at
+// the top of the file. Strings and comments are tokenised first and
+// stashed as placeholders so later passes can't reach inside them.
+// ---------------------------------------------------------------------
+function escapeHtml(s) {
+  return String(s).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+}
+
+function highlightYaml(src) {
+  // Process line by line so leading indentation, comments, and the key:
+  // pattern are easy to anchor.
+  return src.split("\n").map((rawLine) => {
+    // Pull out any trailing # comment first (only if # isn't inside a string).
+    let line = rawLine;
+    let comment = "";
+    // crude: find a # that's outside paired quotes
+    let inS = false, inD = false;
+    for (let i = 0; i < line.length; i++) {
+      const c = line[i];
+      if (c === "'" && !inD) inS = !inS;
+      else if (c === '"' && !inS) inD = !inD;
+      else if (c === "#" && !inS && !inD && (i === 0 || /\s/.test(line[i - 1]))) {
+        comment = line.slice(i);
+        line = line.slice(0, i);
+        break;
+      }
+    }
+    // Indent (preserve as-is) + body
+    const indentMatch = line.match(/^(\s*)(.*)$/);
+    const indent = indentMatch[1];
+    let body = indentMatch[2];
+
+    // Leading list marker
+    let listMarker = "";
+    const listMatch = body.match(/^(-\s+)/);
+    if (listMatch) {
+      listMarker = `<span class="tok-dash">- </span>`;
+      body = body.slice(listMatch[1].length);
+    } else if (body === "-") {
+      listMarker = `<span class="tok-dash">-</span>`;
+      body = "";
+    }
+
+    // key: value   OR   key:
+    let keyHtml = "";
+    let value = body;
+    const keyMatch = body.match(/^([A-Za-z_][\w\-.]*)(\s*:)(\s*)(.*)$/);
+    if (keyMatch) {
+      keyHtml = `<span class="tok-key">${escapeHtml(keyMatch[1])}</span><span class="tok-key">${escapeHtml(keyMatch[2])}</span>${keyMatch[3]}`;
+      value = keyMatch[4];
+    }
+
+    // Highlight the value portion
+    let valHtml;
+    if (value === "" || value === undefined) {
+      valHtml = "";
+    } else if (/^['"]/.test(value)) {
+      // quoted string — capture and don't tokenise further
+      const qm = value.match(/^(['"])((?:\\.|(?!\1).)*)\1(.*)$/);
+      if (qm) {
+        valHtml = `<span class="tok-str">${escapeHtml(qm[1] + qm[2] + qm[1])}</span>${escapeHtml(qm[3])}`;
+      } else {
+        valHtml = `<span class="tok-str">${escapeHtml(value)}</span>`;
+      }
+    } else if (/^(true|false|null|~|yes|no|on|off)$/i.test(value.trim())) {
+      valHtml = `<span class="tok-bool">${escapeHtml(value)}</span>`;
+    } else if (/^-?\d+(\.\d+)?(e[+-]?\d+)?$/i.test(value.trim())) {
+      valHtml = `<span class="tok-num">${escapeHtml(value)}</span>`;
+    } else if (/^[\[{]/.test(value)) {
+      // flow-style — highlight numbers/booleans/strings inside
+      valHtml = highlightFlow(value);
+    } else {
+      // bare scalar — leave plain, but still escape
+      valHtml = escapeHtml(value);
+    }
+
+    const commentHtml = comment ? `<span class="tok-comment">${escapeHtml(comment)}</span>` : "";
+    return indent + listMarker + keyHtml + valHtml + commentHtml;
+  }).join("\n");
+}
+
+function highlightFlow(s) {
+  // Highlight tokens inside a YAML flow-style value like [1, 2, true, "x"].
+  // First pull strings out as placeholders so we don't recolour their guts.
+  const stash = [];
+  let safe = s.replace(/(['"])(?:\\.|(?!\1).)*\1/g, (m) => {
+    stash.push(m);
+    return ` ${stash.length - 1} `;
+  });
+  safe = escapeHtml(safe);
+  safe = safe.replace(/\b(true|false|null|yes|no)\b/gi, '<span class="tok-bool">$1</span>');
+  safe = safe.replace(/(?<![\w.])-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?\b/g, '<span class="tok-num">$&</span>');
+  // restore strings as styled spans
+  safe = safe.replace(/ (\d+) /g, (_, i) => `<span class="tok-str">${escapeHtml(stash[Number(i)])}</span>`);
+  return safe;
+}
+
+function highlightShell(src) {
+  const KW = /\b(if|then|else|elif|fi|for|in|do|done|while|until|case|esac|function|return|break|continue|export|local|readonly|declare|set|unset)\b/g;
+  const BUILTIN = /\b(echo|printf|read|cd|pwd|exit|source|eval|exec|trap|test|true|false|sleep|module|conda|srun|mpirun|python|python3|bash|sh|env)\b/g;
+  const stash = [];
+  // Strings as placeholders first so later passes can't reach inside.
+  let safe = src.replace(/'(?:\\.|[^'])*'|"(?:\\.|[^"])*"/g, (m) => {
+    stash.push(`<span class="tok-str">${escapeHtml(m)}</span>`);
+    return ` S${stash.length - 1} `;
+  });
+  // Comments — line-anchored, # at start of line or after whitespace; skip shebangs.
+  safe = safe.split("\n").map((line, i) => {
+    if (i === 0 && /^#!/.test(line)) {
+      stash.push(`<span class="tok-shebang">${escapeHtml(line)}</span>`);
+      return ` S${stash.length - 1} `;
+    }
+    const idx = (() => {
+      // first # that's at column 0 or preceded by whitespace
+      const m = line.match(/(^|\s)#.*$/);
+      return m ? m.index + (m[1] ? 1 : 0) : -1;
+    })();
+    if (idx === -1) return line;
+    const before = line.slice(0, idx);
+    const cmt = line.slice(idx);
+    stash.push(`<span class="tok-comment">${escapeHtml(cmt)}</span>`);
+    return before + ` S${stash.length - 1} `;
+  }).join("\n");
+  // Escape what's left
+  safe = escapeHtml(safe);
+  // Function definitions: name() {
+  safe = safe.replace(/^(\s*)([A-Za-z_][\w-]*)(\s*\(\s*\)\s*\{)/gm,
+    (_, sp, name, tail) => `${sp}<span class="tok-shfn">${name}</span>${tail}`);
+  // Long/short options: --foo, -f
+  safe = safe.replace(/(^|\s)(--?[A-Za-z][\w-]*)/g,
+    (_, pre, opt) => `${pre}<span class="tok-shopt">${opt}</span>`);
+  // Variables: $VAR, ${VAR}, $1
+  safe = safe.replace(/\$\{[^}]+\}|\$[A-Za-z_]\w*|\$\d+/g,
+    (m) => `<span class="tok-shvar">${m}</span>`);
+  // Numbers (standalone)
+  safe = safe.replace(/(?<![\w.\-])\d+(?:\.\d+)?\b/g, '<span class="tok-num">$&</span>');
+  // Builtins, then keywords (keywords last so they win on ties)
+  safe = safe.replace(BUILTIN, '<span class="tok-shbuiltin">$1</span>');
+  safe = safe.replace(KW, '<span class="tok-shkw">$1</span>');
+  // Restore stashed strings/comments/shebang
+  safe = safe.replace(/ S(\d+) /g, (_, i) => stash[Number(i)]);
+  return safe;
+}
+
 function renderPreview() {
   try {
     if (state.preview.kind === "sh") {
-      previewBody.textContent = buildLauncherSh(getOpts());
+      previewBody.innerHTML = highlightShell(buildLauncherSh(getOpts()));
     } else if (state.experiments.length > 0) {
       const exp = state.experiments[state.preview.expIdx];
       if (!exp) {
@@ -1809,7 +1973,7 @@ function renderPreview() {
         return;
       }
       const obj = buildPhaseYaml(exp, state.preview.phaseIdx, getOpts());
-      previewBody.textContent = renderYaml(obj);
+      previewBody.innerHTML = highlightYaml(renderYaml(obj));
     } else {
       previewBody.textContent = "Add an experiment to see the generated YAML.";
     }
