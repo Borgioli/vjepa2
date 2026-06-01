@@ -1,0 +1,773 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Phase + Triplet Heads Bundle — Visualization</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0b0e14;
+    --bg-2: #11151d;
+    --bg-3: #161b25;
+    --line: #232a37;
+    --line-2: #2c3445;
+    --text: #e6e8ee;
+    --muted: #9aa3b2;
+    --accent: #7aa2f7;
+    --accent-2: #bb9af7;
+    --good: #9ece6a;
+    --warn: #e0af68;
+    --bad: #f7768e;
+    --pill: #1f2532;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  body { display: grid; grid-template-columns: 260px 1fr; min-height: 100vh; }
+  /* sidebar */
+  nav.side {
+    position: sticky; top: 0; align-self: start;
+    height: 100vh; overflow: auto;
+    background: var(--bg-2); border-right: 1px solid var(--line);
+    padding: 22px 18px;
+  }
+  nav.side .title { font-weight: 700; font-size: 14px; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+  nav.side h1 { font-size: 18px; margin: 6px 0 18px; color: var(--text); }
+  nav.side a {
+    display: block; color: var(--muted); text-decoration: none;
+    padding: 7px 10px; border-radius: 8px; font-size: 14px;
+    border-left: 2px solid transparent;
+  }
+  nav.side a:hover { color: var(--text); background: var(--bg-3); }
+  nav.side a.section { font-weight: 600; color: var(--text); margin-top: 14px; }
+  /* main */
+  main { padding: 32px 40px 80px; max-width: 1280px; }
+  h2 { font-size: 22px; margin: 40px 0 14px; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+  h3 { font-size: 16px; margin: 24px 0 10px; color: var(--text); }
+  h2:first-of-type { margin-top: 0; }
+  p { color: var(--muted); line-height: 1.55; }
+  p strong, li strong { color: var(--text); }
+  code { background: var(--bg-3); padding: 2px 6px; border-radius: 4px; font-size: 12.5px; color: #c0caf5; }
+  pre { background: var(--bg-3); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; overflow-x: auto; font-size: 12.5px; color: #c0caf5; }
+  pre code { background: transparent; padding: 0; }
+  ul { line-height: 1.7; color: var(--muted); }
+  /* cards */
+  .grid { display: grid; gap: 14px; }
+  .grid.cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .grid.cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .grid.cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .card {
+    background: var(--bg-2); border: 1px solid var(--line); border-radius: 12px;
+    padding: 16px 18px;
+  }
+  .card h4 { margin: 0 0 4px; font-size: 14px; color: var(--text); }
+  .card .sub { color: var(--muted); font-size: 12.5px; margin-bottom: 12px; }
+  .stat { font-size: 26px; font-weight: 700; color: var(--accent); }
+  .stat.alt { color: var(--accent-2); }
+  .stat.warn { color: var(--warn); }
+  .stat.good { color: var(--good); }
+  .stat-row { display: flex; gap: 10px; flex-wrap: wrap; }
+  .pill {
+    background: var(--pill); border: 1px solid var(--line-2);
+    color: var(--muted); font-size: 11.5px; padding: 3px 8px; border-radius: 999px;
+  }
+  .pill.good { color: var(--good); border-color: rgba(158, 206, 106, .35); }
+  .pill.warn { color: var(--warn); border-color: rgba(224, 175, 104, .35); }
+  /* tables */
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+  th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+  tr:last-child td { border-bottom: none; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  /* charts */
+  .chart-wrap { position: relative; height: 280px; }
+  .chart-wrap.tall { height: 460px; }
+  .chart-wrap.short { height: 200px; }
+  /* file tree */
+  .tree {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px;
+    background: var(--bg-3); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px;
+    color: #c0caf5; white-space: pre; overflow-x: auto;
+  }
+  /* header */
+  header.hero {
+    padding: 28px 32px; border: 1px solid var(--line); border-radius: 14px;
+    background: linear-gradient(135deg, rgba(122,162,247,.10), rgba(187,154,247,.08));
+    margin-bottom: 24px;
+  }
+  header.hero h1 { margin: 0 0 6px; font-size: 28px; }
+  header.hero p { margin: 0; color: var(--muted); }
+  .badge { display: inline-block; padding: 4px 10px; border-radius: 999px; font-size: 12px; background: var(--bg-3); color: var(--accent); border: 1px solid var(--line-2); margin-right: 6px; }
+</style>
+</head>
+<body>
+<nav class="side">
+  <div class="title">Bundle</div>
+  <h1>Phase + Triplet Heads</h1>
+  <a class="section" href="#overview">Overview</a>
+  <a href="#sizes">Bundle composition</a>
+  <a href="#layout">Top-level layout</a>
+  <a class="section" href="#datasets">Datasets</a>
+  <a href="#ds-surgenet-phases">Surgenet phases</a>
+  <a href="#ds-sitl">SITL phases</a>
+  <a href="#ds-cholec80">Cholec80 phases</a>
+  <a href="#ds-surgenet-triplets">Surgenet triplets</a>
+  <a href="#ds-triplet">Raw triplet dataset</a>
+  <a class="section" href="#labels">Label spaces</a>
+  <a href="#phase-spaces">Phase label spaces</a>
+  <a href="#triplet-taxonomy">Triplet taxonomy (105)</a>
+  <a class="section" href="#scripts">Scripts</a>
+  <a href="#scripts-phase">Phase head scripts</a>
+  <a href="#scripts-ovr">OvR phase heads</a>
+  <a href="#scripts-triplet">Triplet head scripts</a>
+  <a href="#scripts-rag">Phase RAG</a>
+  <a href="#scripts-eval">Frozen triplet eval</a>
+  <a class="section" href="#checkpoints">Checkpoints</a>
+  <a href="#ckpt-list">Checkpoint inventory</a>
+  <a href="#rag-indices">RAG indices</a>
+  <a class="section" href="#docs">In-place docs</a>
+  <a href="#quickstart">Quickstart</a>
+</nav>
+
+<main>
+  <header class="hero">
+    <div>
+      <span class="badge">96 GB zip</span>
+      <span class="badge">330,876 files</span>
+      <span class="badge">~115 GB unpacked</span>
+      <span class="badge">generated 2026-05-22</span>
+    </div>
+    <h1>Phase + Triplet Heads — Bundle Visualization</h1>
+    <p>Self-contained snapshot of every dataset, script, checkpoint, and RAG index used by the V-JEPA2 phase-recognition and triplet-recognition heads. This page summarizes <em>what's inside</em> the zip, with real label distributions and references to the in-place AGENTS_*.md docs that remain the authoritative usage guides.</p>
+  </header>
+
+  <!-- ============================================================== -->
+  <h2 id="overview">Overview</h2>
+
+  <div class="grid cols-4">
+    <div class="card"><h4>Total bundle</h4><div class="sub">unpacked size</div><div class="stat">~115 GB</div></div>
+    <div class="card"><h4>Zip on disk</h4><div class="sub">store-only (no deflate)</div><div class="stat alt">96 GB</div></div>
+    <div class="card"><h4>Files</h4><div class="sub">across all sections</div><div class="stat good">330,876</div></div>
+    <div class="card"><h4>Clip .mp4s</h4><div class="sub">video samples</div><div class="stat warn">~330k</div></div>
+  </div>
+
+  <h3 id="sizes">Bundle composition (by size)</h3>
+  <div class="grid cols-2">
+    <div class="card">
+      <div class="chart-wrap"><canvas id="chart-sizes"></canvas></div>
+    </div>
+    <div class="card">
+      <table>
+        <thead><tr><th>Section</th><th class="num">Size</th><th class="num">Share</th></tr></thead>
+        <tbody>
+          <tr><td>globus/surgenet_triplets</td><td class="num">38.0 GB</td><td class="num">33.0%</td></tr>
+          <tr><td>globus/triplet</td><td class="num">20.0 GB</td><td class="num">17.4%</td></tr>
+          <tr><td>globus/sitl_phases</td><td class="num">15.0 GB</td><td class="num">13.0%</td></tr>
+          <tr><td>checkpoints (heads + finetuned)</td><td class="num">25.2 GB</td><td class="num">21.9%</td></tr>
+          <tr><td>V-JEPA2 backbones</td><td class="num">9.6 GB</td><td class="num">8.3%</td></tr>
+          <tr><td>globus/cholec80_phases</td><td class="num">2.9 GB</td><td class="num">2.5%</td></tr>
+          <tr><td>globus/sitl_phases_4s_4fps</td><td class="num">2.4 GB</td><td class="num">2.1%</td></tr>
+          <tr><td>globus/surgenet_phases</td><td class="num">2.2 GB</td><td class="num">1.9%</td></tr>
+          <tr><td>RAG indices + scripts</td><td class="num">~75 MB</td><td class="num">&lt;0.1%</td></tr>
+        </tbody>
+      </table>
+      <p style="margin-top:12px;font-size:12.5px;">Excluded from the zip: <code>__pycache__/</code>, the redundant inner zips <code>yt_robotic_chole_tool_windows_clips.zip</code> (17 GB) and <code>wetransfer_six-videos_*.zip</code> (2.2 GB), and the historical <code>surgenet_triplets_replaced_backup_*</code> folder.</p>
+    </div>
+  </div>
+
+  <h3 id="layout">Top-level layout (inside the zip)</h3>
+  <div class="tree">README/                                       ← index + summaries (this report)
+vjepa2_1/head_phases/                         ← phase-head scripts (multiclass + SARRARP50)
+vjepa2_1/head_phases_ovr/                     ← one-vs-rest phase heads + audits
+vjepa2_1/head_triplets/                       ← triplet audit/analysis scripts
+vjepa2_1/phase_rag/                           ← top-k embedding RAG scripts
+vjepa2_1/phase_rag_embeddings/                ← prebuilt RAG indices (6 variants)
+vjepa2_1/evals/triplet_recog_frozen/          ← frozen-backbone triplet eval pipeline
+vjepa2_1/*.pt, *.pth.tar                      ← V-JEPA2 backbones + phase3 head ckpts
+vjepa2_1/chekpoints_vjepar_surg_finetuned/    ← surgically fine-tuned phase1/2/3 ckpts
+globus/surgenet_phases/                       ← Surgenet native-11 phase clips + CSVs
+globus/surgenet_triplets/                     ← Surgenet triplet/tool windows clips + AGENTS docs
+globus/sitl_phases/                           ← SITL phase clips (native fps)
+globus/sitl_phases_4s_4fps/                   ← SITL phase clips (4s @ 4fps resampled)
+globus/cholec80_phases/                       ← Cholec80 minority-phase clips
+globus/triplet/                               ← Raw triplet videos + labels + splits</div>
+
+  <!-- ============================================================== -->
+  <h2 id="datasets">Datasets</h2>
+
+  <p>Every CSV follows the same per-row convention: <code>/absolute/path/to/clip.mp4 &lt;int_label&gt;</code> (or comma-separated labels for multilabel splits). Absolute paths are rooted at <code>/path/to/data_root/</code>. If you unpack to a different root, use <code>globus/surgenet_triplets/fix_paths.py</code> as a path-rewrite template.</p>
+
+  <!-- Surgenet phases -->
+  <h3 id="ds-surgenet-phases">Surgenet phases — native-11 (2.2 GB)</h3>
+  <div class="grid cols-4">
+    <div class="card"><h4>Clips</h4><div class="stat">2,788</div></div>
+    <div class="card"><h4>Train rows</h4><div class="stat alt">2,704</div></div>
+    <div class="card"><h4>Val rows</h4><div class="stat good">679</div></div>
+    <div class="card"><h4>Classes</h4><div class="stat warn">11</div><div class="sub">native cholecystectomy phases</div></div>
+  </div>
+  <div class="grid cols-2" style="margin-top:14px;">
+    <div class="card">
+      <h4>Per-class counts (train vs val)</h4>
+      <div class="chart-wrap tall"><canvas id="chart-surgenet-phases"></canvas></div>
+    </div>
+    <div class="card">
+      <h4>Label mapping (native-11)</h4>
+      <table>
+        <thead><tr><th class="num">id</th><th>label</th><th class="num">train</th><th class="num">val</th></tr></thead>
+        <tbody id="tbl-surgenet-phases"></tbody>
+      </table>
+      <p style="margin-top:10px;font-size:12px;"><strong>Val split</strong>: Batch4, Batch8. <strong>Split rule</strong>: video-disjoint exhaustive search. <strong>Window</strong>: fixed 16-frame clips at 4&nbsp;fps (4&nbsp;s).</p>
+    </div>
+  </div>
+
+  <!-- SITL -->
+  <h3 id="ds-sitl">SITL phases — native (15 GB) + 4s@4fps (2.4 GB)</h3>
+  <div class="grid cols-4">
+    <div class="card"><h4>Native clips</h4><div class="stat">261,608</div><div class="sub">30 fps, 4 frames, stride 4</div></div>
+    <div class="card"><h4>4s@4fps clips</h4><div class="stat alt">8,701</div><div class="sub">resampled for V-JEPA2 heads</div></div>
+    <div class="card"><h4>Source videos</h4><div class="stat good">41</div></div>
+    <div class="card"><h4>Source-clips/output</h4><div class="stat warn">30</div></div>
+  </div>
+  <div class="card" style="margin-top:14px;">
+    <h4>Label distribution (4s @ 4fps split, top labels)</h4>
+    <div class="chart-wrap tall"><canvas id="chart-sitl"></canvas></div>
+    <p style="margin-top:8px;font-size:12px;">Free-text annotations — the heads consume these via <code>map_sitl_to_cholec80.py</code> or the OvR builder. <code>None</code> rows mark unannotated frames; the heads either drop them or map to a designated negative class.</p>
+  </div>
+
+  <!-- Cholec80 -->
+  <h3 id="ds-cholec80">Cholec80 phases — minority 4-class, 4s@4fps (2.9 GB)</h3>
+  <div class="grid cols-4">
+    <div class="card"><h4>Total clips</h4><div class="stat">9,113</div></div>
+    <div class="card"><h4>Train</h4><div class="stat alt">7,295</div></div>
+    <div class="card"><h4>Val</h4><div class="stat good">1,818</div><div class="sub">16 held-out videos</div></div>
+    <div class="card"><h4>Classes</h4><div class="stat warn">4</div></div>
+  </div>
+  <div class="grid cols-2" style="margin-top:14px;">
+    <div class="card">
+      <h4>Per-class counts</h4>
+      <div class="chart-wrap"><canvas id="chart-cholec80"></canvas></div>
+    </div>
+    <div class="card">
+      <h4>Label map</h4>
+      <table>
+        <thead><tr><th class="num">id</th><th>label</th><th class="num">train</th><th class="num">val</th></tr></thead>
+        <tbody>
+          <tr><td class="num">0</td><td>Preparation</td><td class="num">1,695</td><td class="num">421</td></tr>
+          <tr><td class="num">1</td><td>ClippingCutting</td><td class="num">2,796</td><td class="num">697</td></tr>
+          <tr><td class="num">2</td><td>GallbladderPackaging</td><td class="num">1,496</td><td class="num">374</td></tr>
+          <tr><td class="num">3</td><td>GallbladderRetraction</td><td class="num">1,308</td><td class="num">326</td></tr>
+        </tbody>
+      </table>
+      <p style="margin-top:10px;font-size:12px;"><strong>Build mode</strong>: 4 consecutive 1&nbsp;fps frames, each duplicated ×4 → 4&nbsp;s / 16-frame clip. Restricted to the 4 minority classes from the original 7-way Cholec80 taxonomy. Mixed-label windows are never emitted.</p>
+    </div>
+  </div>
+
+  <!-- Surgenet triplets -->
+  <h3 id="ds-surgenet-triplets">Surgenet triplets (38 GB)</h3>
+  <div class="grid cols-4">
+    <div class="card"><h4>Triplet clips</h4><div class="stat">5,634</div></div>
+    <div class="card"><h4>Tool-window clips</h4><div class="stat alt">21,279</div></div>
+    <div class="card"><h4>Multilabel rows</h4><div class="stat good">3,615 / 1,743</div><div class="sub">train / val</div></div>
+    <div class="card"><h4>Triplet classes</h4><div class="stat warn">105</div></div>
+  </div>
+  <div class="grid cols-2" style="margin-top:14px;">
+    <div class="card">
+      <h4>Top single-label triplet IDs (train)</h4>
+      <div class="chart-wrap tall"><canvas id="chart-triplet-top"></canvas></div>
+      <p style="margin-top:8px;font-size:12px;">ID 26 = <code>grasper | grasp/retract | gallbladder</code> dominates (28% of single-label train rows). Long tail of 90+ rare classes &lt;50 samples each → motivates the soft-label and per-tool single-head variants (see <code>AGENTS_TRIPLET_soft.md</code>).</p>
+    </div>
+    <div class="card">
+      <h4>Per-tool CSV splits (windowed)</h4>
+      <p style="font-size:13px;">Sliding 4&nbsp;s windows at 1&nbsp;s stride, exported as CSV-only (paths point to Globus-named windowed mp4s). Used by the per-tool single-head pipeline.</p>
+      <div class="grid cols-2" style="gap:6px;">
+        <span class="pill">bipolar</span>
+        <span class="pill">clipper</span>
+        <span class="pill">grasper</span>
+        <span class="pill">harmonic_shears</span>
+        <span class="pill">hook</span>
+        <span class="pill">irrigator</span>
+        <span class="pill">needle_driver</span>
+        <span class="pill">scissors</span>
+        <span class="pill">stapler</span>
+      </div>
+      <p style="margin-top:10px;font-size:12px;color:var(--muted);">9 tools × {train, val} = 18 CSVs. Mapping in <code>yt_robotic_chole_per_tool_4s_stride1s_mapping.json</code>. Per-tool ID 0 is always <code>null | null | null</code>.</p>
+    </div>
+  </div>
+
+  <!-- Raw triplet -->
+  <h3 id="ds-triplet">Raw triplet dataset (20 GB)</h3>
+  <div class="grid cols-4">
+    <div class="card"><h4>Clip rows</h4><div class="stat">37,652</div></div>
+    <div class="card"><h4>Clip mp4s</h4><div class="stat alt">21,297</div></div>
+    <div class="card"><h4>Source videos</h4><div class="stat good">6</div><div class="sub">Batches 0–5 @ 4 fps</div></div>
+    <div class="card"><h4>Analysis rows</h4><div class="stat warn">5,761</div></div>
+  </div>
+  <div class="grid cols-3" style="margin-top:14px;">
+    <div class="card">
+      <h4>Instruments</h4>
+      <div class="chart-wrap"><canvas id="chart-triplet-inst"></canvas></div>
+    </div>
+    <div class="card">
+      <h4>Verbs</h4>
+      <div class="chart-wrap"><canvas id="chart-triplet-verb"></canvas></div>
+    </div>
+    <div class="card">
+      <h4>Targets (top 10)</h4>
+      <div class="chart-wrap"><canvas id="chart-triplet-target"></canvas></div>
+    </div>
+  </div>
+  <div class="card" style="margin-top:14px;">
+    <p><strong>CSV schema</strong>: <code>clip_path, tool, verb, target, label</code> (+ <code>instrument_index, verb_index, target_index</code> in the <code>_with_indices</code> variant). The <code>label</code> column is the canonical pipe-joined triplet string. <code>triplet_analysis.csv</code> is a separate per-run summary with timing fields (<code>start_ms</code>, <code>end_ms</code>, <code>duration_ms</code>, <code>start_frame</code>, <code>end_frame</code>, <code>duration_frames</code>).</p>
+  </div>
+
+  <!-- ============================================================== -->
+  <h2 id="labels">Label spaces</h2>
+
+  <h3 id="phase-spaces">Phase label spaces</h3>
+  <div class="grid cols-2">
+    <div class="card">
+      <h4>native11 (Surgenet, SITL)</h4>
+      <table>
+        <thead><tr><th class="num">id</th><th>phase</th></tr></thead>
+        <tbody>
+          <tr><td class="num">0</td><td>Clipping of the cystic duct</td></tr>
+          <tr><td class="num">1</td><td>Clipping the cystic artery</td></tr>
+          <tr><td class="num">2</td><td>Dissection of the gallbladder from the liver</td></tr>
+          <tr><td class="num">3</td><td>Division of the cystic duct and artery</td></tr>
+          <tr><td class="num">4</td><td>Exposure of the working area</td></tr>
+          <tr><td class="num">5</td><td>Isolation of the cystic artery</td></tr>
+          <tr><td class="num">6</td><td>Isolation of the cystic duct</td></tr>
+          <tr><td class="num">7</td><td>Opening anterior peritoneal layer of triangle of Calot</td></tr>
+          <tr><td class="num">8</td><td>Opening posterior peritoneal layer of triangle of Calot</td></tr>
+          <tr><td class="num">9</td><td>Retraction of the gallbladder neck</td></tr>
+          <tr><td class="num">10</td><td>Specimen retrieval</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="card">
+      <h4>reduced6 (OvR heads default)</h4>
+      <p>Collapses adjacent fine-grained phases that the heads conflate in practice. Defined in <code>vjepa2_1/head_phases_ovr/label_spaces.py</code>.</p>
+      <table>
+        <thead><tr><th>native ids</th><th>→</th><th class="num">reduced id</th></tr></thead>
+        <tbody>
+          <tr><td>0, 1</td><td>→</td><td class="num">0</td></tr>
+          <tr><td>2</td><td>→</td><td class="num">1</td></tr>
+          <tr><td>3</td><td>→</td><td class="num">2</td></tr>
+          <tr><td>4</td><td>→</td><td class="num">3</td></tr>
+          <tr><td>5, 6</td><td>→</td><td class="num">4</td></tr>
+          <tr><td>7, 8</td><td>→</td><td class="num">5</td></tr>
+          <tr><td>9, 10</td><td>→</td><td>dropped</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <h3 id="triplet-taxonomy">Triplet taxonomy (105 classes)</h3>
+  <p>Full mapping in <code>globus/surgenet_triplets/yt_robotic_chole_triplet_mapping.json</code>. Each id is a pipe-joined <code>tool | verb | target</code> string. Distribution is heavily long-tailed — first 14 rows below cover all bipolar entries; class IDs go up to 104.</p>
+  <div class="card">
+    <table>
+      <thead><tr><th class="num">id</th><th>tool</th><th>verb</th><th>target</th></tr></thead>
+      <tbody>
+        <tr><td class="num">0</td><td>bipolar</td><td>coagulation</td><td>connective tissue</td></tr>
+        <tr><td class="num">1</td><td>bipolar</td><td>coagulation</td><td>cystic duct</td></tr>
+        <tr><td class="num">2</td><td>bipolar</td><td>grasp/retract</td><td>adhesion</td></tr>
+        <tr><td class="num">3</td><td>bipolar</td><td>grasp/retract</td><td>connective tissue</td></tr>
+        <tr><td class="num">4</td><td>bipolar</td><td>grasp/retract</td><td>cystic duct</td></tr>
+        <tr><td class="num">5</td><td>bipolar</td><td>grasp/retract</td><td>cystic pedicle</td></tr>
+        <tr><td class="num">6</td><td>bipolar</td><td>grasp/retract</td><td>gallbladder</td></tr>
+        <tr><td class="num">…</td><td colspan="3" style="color:var(--muted);">… 91 more (clipper, grasper, harmonic_shears, hook, irrigator, needle_driver, scissors, stapler) …</td></tr>
+        <tr><td class="num">26</td><td>grasper</td><td>grasp/retract</td><td>gallbladder</td></tr>
+        <tr><td class="num">…</td><td colspan="3" style="color:var(--muted);">… up to 104 …</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ============================================================== -->
+  <h2 id="scripts">Scripts</h2>
+
+  <p>All scripts assume the Python env at <code>/path/to/data_root/vjepa2_1/.venv/bin/python</code> on the original machine. The bundle does <em>not</em> include the venv — recreate it from the V-JEPA2 repo's requirements on the target host.</p>
+
+  <h3 id="scripts-phase"><code>vjepa2_1/head_phases/</code> — phase heads (multiclass)</h3>
+  <div class="card"><table>
+    <thead><tr><th>File</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr><td><code>dataset_creation.py</code></td><td>Build phase-clip CSV datasets from raw annotations.</td></tr>
+      <tr><td><code>video_dataset_creation.py</code></td><td>Variant: build datasets directly from full videos.</td></tr>
+      <tr><td><code>build_sitl_4s_4fps_dataset.py</code></td><td>Resample SITL phases to 4&nbsp;s / 4&nbsp;fps clips → <code>globus/sitl_phases_4s_4fps/</code>.</td></tr>
+      <tr><td><code>build_sarrarp50_action_dataset.py</code></td><td>Build SARRARP50 action-recognition dataset.</td></tr>
+      <tr><td><code>prepare_sarrarp50_dataset.py</code></td><td>Prep step for the SARRARP50 build.</td></tr>
+      <tr><td><code>convert_sitl_phase_probe_csv.py</code></td><td>Convert legacy SITL phase probes → standard CSV.</td></tr>
+      <tr><td><code>convert_temporal_csv.py</code></td><td>Temporal-CSV conversion helper.</td></tr>
+      <tr><td><code>map_sitl_to_cholec80.py</code></td><td>Map SITL phase labels onto the Cholec80 label space.</td></tr>
+      <tr><td><code>analyze_phase_clip_mosaics.py</code></td><td>Mosaic visualization of phase clips.</td></tr>
+      <tr><td><code>analyze_surgenet_phase_clip_mosaics.py</code></td><td>Same, for Surgenet phases.</td></tr>
+      <tr><td><code>AGENTS_SARRARP50_ACTION_BACKBONES.md</code></td><td>(in-place doc) SARRARP50 backbone notes.</td></tr>
+      <tr><td><code>SARRARP50_ACTION_BACKBONE_TESTS.md</code></td><td>(in-place doc) SARRARP50 test logbook.</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3 id="scripts-ovr"><code>vjepa2_1/head_phases_ovr/</code> — one-vs-rest phase heads</h3>
+  <div class="card"><table>
+    <thead><tr><th>File</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr><td><code>build_phase_ovr_heads.py</code></td><td>Emit one binary <code>train.csv</code>/<code>val.csv</code> + config per phase.</td></tr>
+      <tr><td><code>label_spaces.py</code></td><td>Defines <code>reduced6</code> and <code>native11</code> label collapses.</td></tr>
+      <tr><td><code>analyze_ovr_phase_clip_mosaics.py</code></td><td>Per-class mosaic viz.</td></tr>
+      <tr><td><code>audits/reduced6/</code></td><td>Per-class audit scripts/data for the reduced-6 label space.</td></tr>
+      <tr><td><code>audits_surgenet_only/reduced6/</code></td><td>Same audits restricted to the Surgenet half.</td></tr>
+      <tr><td><code>README.md</code></td><td><strong>Authoritative usage doc</strong> — label spaces, default CSV sources, training workflow.</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3 id="scripts-triplet"><code>vjepa2_1/head_triplets/</code> — triplet audit scripts</h3>
+  <div class="card"><table>
+    <thead><tr><th>File</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr><td><code>analyze_triplet_clip_mosaics.py</code></td><td>Mosaic viz over triplet clips.</td></tr>
+      <tr><td><code>analyze_tool_presence_clip_mosaics.py</code></td><td>Mosaic viz over tool-presence windows.</td></tr>
+      <tr><td><code>audit_utils.py</code></td><td>Shared audit helpers.</td></tr>
+      <tr><td><code>run_all_tool_presence_audits.sh</code></td><td>Batch-run tool-presence audits.</td></tr>
+      <tr><td><code>run_all_tool_presence_audits_tool4.sh</code></td><td>Variant restricted to tool 4.</td></tr>
+      <tr><td><code>run_triplet_audit_top12.sh</code></td><td>Audit the top-12 triplets.</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3 id="scripts-rag"><code>vjepa2_1/phase_rag/</code> — top-k embedding RAG for phases</h3>
+  <div class="card"><table>
+    <thead><tr><th>File</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr><td><code>phase_topk_embedding_index.py</code></td><td>Build a top-k token-embedding index from a labeled CSV.</td></tr>
+      <tr><td><code>phase_topk_rag_eval.py</code></td><td>Score a held-out CSV split against an index.</td></tr>
+      <tr><td><code>phase_topk_rag_inference.py</code></td><td>One-clip phase prediction against an index.</td></tr>
+      <tr><td><code>README.md</code></td><td><strong>Authoritative usage doc</strong> — default checkpoint (phase3 high-res 512), build/eval/inference commands, known data caveats (e.g. missing Batch7 clips).</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3 id="scripts-eval"><code>vjepa2_1/evals/triplet_recog_frozen/</code> — frozen-backbone triplet eval</h3>
+  <div class="card"><table>
+    <thead><tr><th>File</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr><td><code>eval.py</code></td><td>Main eval entrypoint.</td></tr>
+      <tr><td><code>models.py</code></td><td>Head model definitions.</td></tr>
+      <tr><td><code>dataset_wrapper.py</code> / <code>test_dataset_wrapper.py</code></td><td>Triplet dataset wrappers + tests.</td></tr>
+      <tr><td><code>test_multitask.py</code> / <code>test_missing_labels.py</code></td><td>Multitask + missing-label test cases.</td></tr>
+      <tr><td><code>example_config_multitask.yaml</code></td><td>Reference multitask config.</td></tr>
+      <tr><td><code>modelcustom/vit_encoder_multiclip.py</code></td><td>Multi-clip ViT encoder wrapper.</td></tr>
+      <tr><td><code>modelcustom/vit_encoder_multiclip_multilevel.py</code></td><td>Multi-level variant.</td></tr>
+      <tr><td><code>README_MULTITASK.md</code></td><td><strong>Authoritative usage doc</strong> for the multitask setup.</td></tr>
+    </tbody>
+  </table></div>
+
+  <!-- ============================================================== -->
+  <h2 id="checkpoints">Checkpoints</h2>
+
+  <h3 id="ckpt-list">Checkpoint inventory</h3>
+  <div class="grid cols-2">
+    <div class="card">
+      <h4>V-JEPA2 backbones (9.6 GB)</h4>
+      <table>
+        <thead><tr><th>File</th><th class="num">Size</th></tr></thead>
+        <tbody>
+          <tr><td><code>vjepa2_1/latest.pt</code></td><td class="num">4.8 GB</td></tr>
+          <tr><td><code>vjepa2_1/vjepa2_1_vitl_dist_vitG_384.pt</code></td><td class="num">4.8 GB</td></tr>
+        </tbody>
+      </table>
+      <p style="margin-top:10px;font-size:12px;">The distilled ViT-L @ 384 px is the default for the lower-res RAG index variant; <code>latest.pt</code> is referenced by some experimental configs.</p>
+    </div>
+    <div class="card">
+      <h4>Phase-head checkpoints (9.9 GB)</h4>
+      <table>
+        <thead><tr><th>File</th><th class="num">Size</th></tr></thead>
+        <tbody>
+          <tr><td><code>vjepa2_1/phase3_highfps.pth.tar</code></td><td class="num">5.1 GB</td></tr>
+          <tr><td><code>vjepa2_1/all_datasets_plus_surgvu_phase3_higher_res_g8_latest.pt</code></td><td class="num">4.8 GB</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="card" style="grid-column:1 / -1;">
+      <h4>Surgically fine-tuned phase backbones (15.3 GB)</h4>
+      <p style="margin-top:0;font-size:12.5px;">Under <code>vjepa2_1/chekpoints_vjepar_surg_finetuned/</code> — typo <code>chekpoints</code> preserved on purpose so existing config paths still resolve. Load with <code>checkpoint_key: target_encoder</code> at resolution 512.</p>
+      <table>
+        <thead><tr><th>Stage</th><th>File</th><th class="num">Size</th></tr></thead>
+        <tbody>
+          <tr><td>Phase 1 — warmup</td><td><code>single4_all_datasets_phase1_warmup_g8_latest.pth.tar</code></td><td class="num">5.1 GB</td></tr>
+          <tr><td>Phase 2 — main</td><td><code>single4_all_datasets_phase2_main_g8_latest.pth.tar</code></td><td class="num">5.1 GB</td></tr>
+          <tr><td>Phase 3 — high-res <span class="pill good">RAG default</span></td><td><code>single4_all_datasets_phase3_higher_res_g8_latest.pth.tar</code></td><td class="num">5.1 GB</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <h3 id="rag-indices">Prebuilt RAG indices (~75 MB)</h3>
+  <p>Under <code>vjepa2_1/phase_rag_embeddings/</code>. Each index dir contains <code>clips.csv</code>, <code>embeddings.pt</code>, and a <code>metadata.json</code> recording the encoder settings — so eval/inference normally only need the index path.</p>
+  <div class="card"><table>
+    <thead><tr><th>Index</th><th>Backbone (key)</th><th class="num">res</th><th class="num">top-k</th><th class="num">batch</th><th class="num">size</th></tr></thead>
+    <tbody>
+      <tr><td><code>native11_phase3_topk8_train75/</code> <span class="pill good">canonical</span></td><td>phase3 high-res (target_encoder)</td><td class="num">512</td><td class="num">2†</td><td class="num">8</td><td class="num">13 MB</td></tr>
+      <tr><td><code>native11_vitl_dist_vitg384_topk8_train75/</code></td><td>distilled ViT-L@384 (ema_encoder)</td><td class="num">384</td><td class="num">8</td><td class="num">8</td><td class="num">40 MB</td></tr>
+      <tr><td><code>native11_latestpt_topk4_train75/</code></td><td>phase3 high-res (target_encoder)</td><td class="num">512</td><td class="num">4</td><td class="num">8</td><td class="num">22 MB</td></tr>
+      <tr><td><code>native11_phase3_topk8_train75_batch4_smoke/</code></td><td>phase3 high-res</td><td class="num">512</td><td class="num">8</td><td class="num">4</td><td class="num">152 KB</td></tr>
+      <tr><td><code>native11_phase3_topk8_train75_batch8_smoke/</code></td><td>phase3 high-res</td><td class="num">512</td><td class="num">8</td><td class="num">8</td><td class="num">280 KB</td></tr>
+      <tr><td><code>native11_phase3_topk8_train75_smoke/</code></td><td>phase3 high-res</td><td class="num">512</td><td class="num">8</td><td class="num">1</td><td class="num">56 KB</td></tr>
+    </tbody>
+  </table>
+  <p style="margin-top:10px;font-size:12px;">† The canonical index's <code>metadata.json</code> records <code>top_k=2</code> despite the dir name suggesting 8 — this is a known artifact from a re-build; the directory name reflects the intent, the metadata reflects the actual run.</p>
+  </div>
+
+  <!-- ============================================================== -->
+  <h2 id="docs">In-place documentation (authoritative)</h2>
+  <p>These files are preserved at their original paths inside the bundle and are the source of truth for usage. The summaries on this page are an index, not a replacement.</p>
+  <div class="grid cols-2">
+    <div class="card">
+      <h4>Phase recognition</h4>
+      <ul style="margin:0;padding-left:18px;">
+        <li><code>globus/surgenet_phases/yt_robotic_chole_native11_phase_summary.md</code></li>
+        <li><code>vjepa2_1/head_phases_ovr/README.md</code></li>
+        <li><code>vjepa2_1/phase_rag/README.md</code></li>
+        <li><code>vjepa2_1/head_phases/AGENTS_SARRARP50_ACTION_BACKBONES.md</code></li>
+        <li><code>vjepa2_1/head_phases/SARRARP50_ACTION_BACKBONE_TESTS.md</code></li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>Triplet recognition</h4>
+      <ul style="margin:0;padding-left:18px;">
+        <li><code>globus/surgenet_triplets/yt_robotic_chole_triplet_summary.md</code></li>
+        <li><code>globus/surgenet_triplets/AGENTS_TRIPLET.md</code></li>
+        <li><code>globus/surgenet_triplets/AGENTS_TRIPLET_soft.md</code></li>
+        <li><code>globus/surgenet_triplets/AGENTS_SINGLE_TOOL.md</code></li>
+        <li><code>globus/surgenet_triplets/AGENTS_SINGLE_TOOL_SOFT.md</code></li>
+        <li><code>globus/surgenet_triplets/AGENTS_THRESHOLD_TUNING.md</code></li>
+        <li><code>globus/surgenet_triplets/AGENTS_INFERENCE.md</code></li>
+        <li><code>globus/surgenet_triplets/tool_csv/README.md</code></li>
+        <li><code>vjepa2_1/evals/triplet_recog_frozen/README_MULTITASK.md</code></li>
+      </ul>
+    </div>
+    <div class="card" style="grid-column:1 / -1;">
+      <h4>One-slide HTML overviews</h4>
+      <ul style="margin:0;padding-left:18px;">
+        <li><code>globus/surgenet_triplets/triplet_multilabel_pipeline_one_slide.html</code></li>
+        <li><code>globus/surgenet_triplets/phase_recognition_ovr_transformer_one_slide.html</code></li>
+        <li><code>globus/surgenet_triplets/triplet_labels/triplet_visualization.html</code></li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ============================================================== -->
+  <h2 id="quickstart">Quickstart</h2>
+
+  <h3>Build the canonical phase RAG index</h3>
+  <pre><code>/path/to/data_root/vjepa2_1/.venv/bin/python \
+  /path/to/data_root/vjepa2_1/phase_rag/phase_topk_embedding_index.py \
+  --source-splits train \
+  --top-k 8 \
+  --batch-size 8 \
+  --num-workers 4 \
+  --device cuda \
+  --skip-missing-clips \
+  --output-dir /path/to/data_root/vjepa2_1/phase_rag_embeddings/native11_phase3_topk8_train75_NEW \
+  --overwrite</code></pre>
+
+  <h3>Build all OvR phase head datasets + configs (reduced6)</h3>
+  <pre><code>/path/to/data_root/vjepa2_1/.venv/bin/python \
+  /path/to/data_root/vjepa2_1/head_phases_ovr/build_phase_ovr_heads.py \
+  --label-space reduced6 \
+  --sources sitl surgenet</code></pre>
+
+  <h3>Preflight sanity checks</h3>
+  <pre><code># 1) CSV paths actually resolve?
+head -1 globus/surgenet_phases/yt_robotic_chole_native11_phases_val.csv \
+  | awk '{print $1}' | xargs ls -lh
+
+# 2) Index metadata says which backbone it expects?
+cat vjepa2_1/phase_rag_embeddings/native11_phase3_topk8_train75/metadata.json | jq .
+
+# 3) Backbone exists at the path the index expects?
+ls -lh vjepa2_1/chekpoints_vjepar_surg_finetuned/single4_all_datasets_phase3_higher_res_g8_latest.pth.tar</code></pre>
+
+  <p style="margin-top:30px;font-size:12px;text-align:center;color:var(--muted);">Generated 2026-05-22 from <code>/path/to/data_root</code>. Charts powered by Chart.js v4 (loaded from jsDelivr). Single self-contained HTML — works offline once Chart.js is cached.</p>
+</main>
+
+<script>
+const TEXT = '#e6e8ee', MUTED = '#9aa3b2', GRID = '#232a37';
+Chart.defaults.color = TEXT;
+Chart.defaults.borderColor = GRID;
+Chart.defaults.font.family = 'ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+
+const PALETTE = [
+  '#7aa2f7', '#bb9af7', '#9ece6a', '#e0af68', '#f7768e',
+  '#2ac3de', '#ff9e64', '#73daca', '#c0caf5', '#ffafd2', '#9a7cf0'
+];
+
+// ---------- composition pie ----------
+new Chart(document.getElementById('chart-sizes'), {
+  type: 'doughnut',
+  data: {
+    labels: [
+      'surgenet_triplets', 'triplet', 'sitl_phases',
+      'finetuned ckpts', 'phase-head ckpts', 'backbones',
+      'cholec80_phases', 'sitl_phases_4s_4fps', 'surgenet_phases', 'RAG + scripts'
+    ],
+    datasets: [{
+      data: [38.0, 20.0, 15.0, 15.3, 9.9, 9.6, 2.9, 2.4, 2.2, 0.075],
+      backgroundColor: PALETTE,
+      borderColor: '#0b0e14',
+      borderWidth: 2
+    }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    cutout: '55%',
+    plugins: {
+      legend: { position: 'right', labels: { boxWidth: 12, font: { size: 12 } } },
+      tooltip: { callbacks: { label: (ctx) => `${ctx.label}: ${ctx.parsed} GB` } }
+    }
+  }
+});
+
+// ---------- surgenet phases ----------
+const SURG_PHASES = [
+  { id: 0, name: 'Clipping of the cystic duct', train: 72, val: 22 },
+  { id: 1, name: 'Clipping the cystic artery', train: 43, val: 1 },
+  { id: 2, name: 'Dissection of gallbladder from liver', train: 1041, val: 264 },
+  { id: 3, name: 'Division of cystic duct and artery', train: 40, val: 7 },
+  { id: 4, name: 'Exposure of the working area', train: 505, val: 98 },
+  { id: 5, name: 'Isolation of the cystic artery', train: 259, val: 89 },
+  { id: 6, name: 'Isolation of the cystic duct', train: 458, val: 162 },
+  { id: 7, name: 'Opening ant. peritoneal layer (Calot)', train: 68, val: 12 },
+  { id: 8, name: 'Opening post. peritoneal layer (Calot)', train: 52, val: 8 },
+  { id: 9, name: 'Retraction of the gallbladder neck', train: 6, val: 1 },
+  { id:10, name: 'Specimen retrieval', train: 160, val: 15 },
+];
+new Chart(document.getElementById('chart-surgenet-phases'), {
+  type: 'bar',
+  data: {
+    labels: SURG_PHASES.map(p => `${p.id}`),
+    datasets: [
+      { label: 'train', data: SURG_PHASES.map(p => p.train), backgroundColor: PALETTE[0] },
+      { label: 'val',   data: SURG_PHASES.map(p => p.val),   backgroundColor: PALETTE[1] },
+    ]
+  },
+  options: {
+    indexAxis: 'y',
+    responsive: true, maintainAspectRatio: false,
+    scales: { x: { type: 'logarithmic', grid: { color: GRID }, ticks: { color: MUTED } }, y: { grid: { color: GRID }, ticks: { color: MUTED } } },
+    plugins: { legend: { position: 'top' }, tooltip: { callbacks: { title: (ctx) => SURG_PHASES[ctx[0].dataIndex].name } } }
+  }
+});
+const tbl = document.getElementById('tbl-surgenet-phases');
+SURG_PHASES.forEach(p => {
+  const r = document.createElement('tr');
+  r.innerHTML = `<td class="num">${p.id}</td><td>${p.name}</td><td class="num">${p.train.toLocaleString()}</td><td class="num">${p.val.toLocaleString()}</td>`;
+  tbl.appendChild(r);
+});
+
+// ---------- SITL 4s@4fps top labels ----------
+const SITL_TOP = [
+  ['dissection of the gallbladder from the liver', 2886],
+  ['None', 2058],
+  ['Opening anterior peritoneal layer (Calot)', 1261],
+  ['Isolation of the cystic duct', 670],
+  ['Isolation of the cystic artery', 526],
+  ['Opening posterior peritoneal layer (Calot)', 324],
+  ['clipping of the cystic duct', 289],
+  ['Division of the cystic artery', 131],
+  ['Division of the cystic duct', 121],
+  ['clipping of the cystic artery', 101],
+  ['Exposure of the working area', 73],
+  ['/', 58],
+  ['Retraction of the gallbladder neck', 37],
+  ['Isolation of the cystic artery (second branch)', 37],
+  ['1: exposure of the working area', 35],
+];
+new Chart(document.getElementById('chart-sitl'), {
+  type: 'bar',
+  data: {
+    labels: SITL_TOP.map(([n]) => n),
+    datasets: [{ label: 'clips', data: SITL_TOP.map(([,v]) => v), backgroundColor: PALETTE[3] }]
+  },
+  options: {
+    indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { display: false } },
+    scales: { x: { grid: { color: GRID }, ticks: { color: MUTED } }, y: { grid: { color: GRID }, ticks: { color: MUTED, font: { size: 11 } } } }
+  }
+});
+
+// ---------- cholec80 ----------
+new Chart(document.getElementById('chart-cholec80'), {
+  type: 'bar',
+  data: {
+    labels: ['Preparation', 'ClippingCutting', 'GallbladderPackaging', 'GallbladderRetraction'],
+    datasets: [
+      { label: 'train', data: [1695, 2796, 1496, 1308], backgroundColor: PALETTE[0] },
+      { label: 'val',   data: [421, 697, 374, 326],     backgroundColor: PALETTE[1] }
+    ]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { position: 'top' } },
+    scales: { x: { grid: { color: GRID }, ticks: { color: MUTED, font: { size: 11 } } }, y: { grid: { color: GRID }, ticks: { color: MUTED } } }
+  }
+});
+
+// ---------- triplet top single-label ----------
+const TRIP_TOP = [
+  [26, 'grasper | grasp/retract | gallbladder', 1079],
+  [50, '(see mapping)', 409],
+  [69, '(see mapping)', 203],
+  [29, 'grasper | grasp/retract | null', 184],
+  [59, '(see mapping)', 181],
+  [22, 'grasper | grasp/retract | cystic duct', 125],
+  [49, '(see mapping)', 120],
+  [85, '(see mapping)', 117],
+  [34, '(see mapping)', 104],
+  [ 6, 'bipolar | grasp/retract | gallbladder', 101],
+  [20, 'grasper | grasp/retract | connective tissue', 92],
+  [30, 'grasper | grasp/retract | omentum', 77],
+  [23, 'grasper | grasp/retract | cystic pedicle', 69],
+  [66, '(see mapping)', 66],
+  [58, '(see mapping)', 65],
+];
+new Chart(document.getElementById('chart-triplet-top'), {
+  type: 'bar',
+  data: {
+    labels: TRIP_TOP.map(t => `id ${t[0]}`),
+    datasets: [{ label: 'train rows', data: TRIP_TOP.map(t => t[2]), backgroundColor: PALETTE[4] }]
+  },
+  options: {
+    indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { display: false }, tooltip: { callbacks: { title: (ctx) => TRIP_TOP[ctx[0].dataIndex][1] } } },
+    scales: { x: { grid: { color: GRID }, ticks: { color: MUTED } }, y: { grid: { color: GRID }, ticks: { color: MUTED } } }
+  }
+});
+
+// ---------- raw triplet: instruments / verbs / targets ----------
+new Chart(document.getElementById('chart-triplet-inst'), {
+  type: 'bar',
+  data: {
+    labels: ['grasper','hook','scissors','irrigator','bipolar','clipper','harmonic shears','needle driver','stapler'],
+    datasets: [{ data: [15803, 9670, 3922, 2856, 2255, 1724, 778, 284, 16], backgroundColor: PALETTE[0] }]
+  },
+  options: { responsive: true, maintainAspectRatio: false, indexAxis: 'y', plugins: { legend: { display: false } },
+    scales: { x: { grid: { color: GRID }, ticks: { color: MUTED } }, y: { grid: { color: GRID }, ticks: { color: MUTED, font: { size: 11 } } } } }
+});
+new Chart(document.getElementById('chart-triplet-verb'), {
+  type: 'bar',
+  data: {
+    labels: ['grasp/retract','coagulation','dissect','null','clean','clip','cut','place/pack'],
+    datasets: [{ data: [18222, 7982, 3107, 2938, 1912, 1586, 1554, 7], backgroundColor: PALETTE[1] }]
+  },
+  options: { responsive: true, maintainAspectRatio: false, indexAxis: 'y', plugins: { legend: { display: false } },
+    scales: { x: { grid: { color: GRID }, ticks: { color: MUTED } }, y: { grid: { color: GRID }, ticks: { color: MUTED, font: { size: 11 } } } } }
+});
+new Chart(document.getElementById('chart-triplet-target'), {
+  type: 'bar',
+  data: {
+    labels: ['gallbladder','connective tissue','adhesion','liver','cystic duct','cystic pedicle','fluid','cystic artery','peritoneum','null'],
+    datasets: [{ data: [11011, 6183, 3111, 2969, 2848, 2313, 1928, 1766, 1593, 1237], backgroundColor: PALETTE[2] }]
+  },
+  options: { responsive: true, maintainAspectRatio: false, indexAxis: 'y', plugins: { legend: { display: false } },
+    scales: { x: { grid: { color: GRID }, ticks: { color: MUTED } }, y: { grid: { color: GRID }, ticks: { color: MUTED, font: { size: 11 } } } } }
+});
+</script>
+</body>
+</html>

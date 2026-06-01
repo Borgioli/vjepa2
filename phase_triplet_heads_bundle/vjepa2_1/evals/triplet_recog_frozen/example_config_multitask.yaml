@@ -1,0 +1,85 @@
+# Example configuration for Single-Head Multi-Task Training
+# This shows how to configure the system for multi-task learning with a single head
+
+eval_name: 'triplet_recog_frozen'
+
+folder: '/path/to/vjepa2/evals/triplet_recog_frozen'
+tag: 'single-head-multitask-example'
+resume_checkpoint: False
+val_only: False
+num_workers: 8
+
+model_kwargs:
+  checkpoint: '/path/to/surg_vid/neil_data/models/phase1_32gpu_64bs_6nw_16cpu_2pref_inf_eqwt_25_11_22_01_34_45/latest.pt'
+  module_name: 'evals.video_classification_frozen.modelcustom.vit_encoder_multiclip'
+  pretrain_kwargs:
+    encoder:
+      model_name: 'vit_giant_xformers'
+      patch_size: 16
+      tubelet_size: 2
+      checkpoint_key: 'target_encoder'
+      use_sdpa: True
+      use_rope: True
+  wrapper_kwargs:
+    max_frames: 128
+    use_pos_embed: False
+
+experiment:
+  classifier:
+    num_probe_blocks: 4
+    num_heads: 16
+    # NEW: Enable single-head multi-task architecture
+    use_single_head: True
+  
+  data:
+    dataset_type: 'VideoDataset'
+    dataset_train: '/path/to/phase_triplet_heads_bundle/vjepa2_1/app/csv_head_models/triplet_train_supported.csv'
+    dataset_val: '/path/to/phase_triplet_heads_bundle/vjepa2_1/app/csv_head_models/triplet_val_supported.csv'
+    
+    # OPTION 1: Single-task mode (backward compatible)
+    # num_classes: 7
+    
+    # OPTION 2: Multi-task mode with single head
+    # Specify number of classes for each task as a list
+    # Tools: 6 classes, Verbs: 5 classes, Targets: 10 classes
+    num_classes_per_task: [6, 5, 10]
+    
+    frames_per_clip: 16
+    resolution: 256
+    num_segments: 1
+    num_views_per_segment: 1
+    num_workers: 8
+    pin_memory: True
+    normalization: null
+  
+  optimization:
+    batch_size: 64
+    num_epochs: 100
+    use_bfloat16: True
+    multihead_kwargs:
+      - warmup: 0.05
+        start_lr: 0.0001
+        lr: 0.001
+        final_lr: 0.00001
+        weight_decay: 0.05
+        final_weight_decay: 0.4
+
+nodes: 1
+tasks_per_node: 1
+mem_per_gpu: '40G'
+cpus_per_task: 16
+
+# NOTES:
+# 1. When use_single_head=True and num_classes_per_task is a list:
+#    - Uses SingleHeadMultiTaskClassifier with ONE pooler query and ONE linear layer
+#    - Outputs are split across tasks from a single concatenated output
+#    - Forces shared representation learning across all tasks
+#
+# 2. Dataset must return multiple labels for multi-task mode:
+#    - Your dataset's __getitem__ should return: (video, [label_task0, label_task1, label_task2])
+#    - Example: (video_tensor, [tool_label, verb_label, target_label])
+#
+# 3. For single-task mode (backward compatible):
+#    - Set use_single_head: False (or omit it)
+#    - Use num_classes instead of num_classes_per_task
+#    - Dataset returns: (video, label)
