@@ -444,15 +444,9 @@
 </div>
 <script>
   (function () {
-    try {
-      if (localStorage.getItem("ablationBuilder.firstHintSeen") === "1") return;
-    } catch (_) { /* localStorage may be blocked; show the hint anyway */ }
     var hint = document.getElementById("firstHint");
     if (!hint) return;
-    var dismiss = function () {
-      hint.classList.remove("show");
-      try { localStorage.setItem("ablationBuilder.firstHintSeen", "1"); } catch (_) {}
-    };
+    var dismiss = function () { hint.classList.remove("show"); };
     // Reveal after a short delay so it animates in after page paint.
     setTimeout(function () { hint.classList.add("show"); }, 400);
     // Auto-hide after ~9 seconds.
